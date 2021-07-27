@@ -11,11 +11,39 @@ import "./libraries/LiquidityAmounts.sol";
 import "./libraries/Math.sol";
 import "./libraries/TickMath.sol";
 
-import "./interfaces/IAloePredictions.sol";
-import "./interfaces/IAloePredictionsImmutables.sol";
-
-import "./AloePoolERC20.sol";
+import "./AloeBlendERC20.sol";
 import "./UniswapMinter.sol";
+
+/*
+                                                                                                                        
+                                                   #                                                                    
+                                                  ###                                                                   
+                                                  #####                                                                 
+                               #                 #######                                *###*                           
+                                ###             #########                         ########                              
+                                #####         ###########                   ###########                                 
+                                ########    ############               ############                                     
+                                 ########    ###########         *##############                                        
+                                ###########   ########      #################                                           
+                                ############   ###      #################                                               
+                                ############       ##################                                                   
+                               #############    #################*         *#############*                              
+                              ##############    #############      #####################################                
+                             ###############   ####******      #######################*                                 
+                           ################                                                                             
+                         #################   *############################*                                             
+                           ##############    ######################################                                     
+                               ########    ################*                     **######*                              
+                                   ###    ###                                                                           
+                                                                                                                        
+         ___       ___       ___       ___            ___       ___       ___       ___       ___       ___       ___   
+        /\  \     /\__\     /\  \     /\  \          /\  \     /\  \     /\  \     /\  \     /\  \     /\  \     /\__\  
+       /::\  \   /:/  /    /::\  \   /::\  \        /::\  \   /::\  \   /::\  \   _\:\  \    \:\  \   /::\  \   /:/  /  
+      /::\:\__\ /:/__/    /:/\:\__\ /::\:\__\      /:/\:\__\ /::\:\__\ /::\:\__\ /\/::\__\   /::\__\ /::\:\__\ /:/__/   
+      \/\::/  / \:\  \    \:\/:/  / \:\:\/  /      \:\ \/__/ \/\::/  / \/\::/  / \::/\/__/  /:/\/__/ \/\::/  / \:\  \   
+        /:/  /   \:\__\    \::/  /   \:\/  /        \:\__\     /:/  /     \/__/   \:\__\    \/__/      /:/  /   \:\__\  
+        \/__/     \/__/     \/__/     \/__/          \/__/     \/__/               \/__/               \/__/     \/__/  
+*/
 
 uint256 constant TWO_144 = 2**144;
 
@@ -26,7 +54,7 @@ struct PDF {
     uint128 sigmaU;
 }
 
-contract AloePool is AloePoolERC20, UniswapMinter {
+contract AloeBlend is AloeBlendERC20, UniswapMinter {
     using SafeERC20 for IERC20;
 
     event Deposit(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
@@ -40,9 +68,6 @@ contract AloePool is AloePoolERC20, UniswapMinter {
 
     /// @dev The number of seconds to look back when computing current price. Makes manipulation harder
     uint32 public constant CURRENT_PRICE_WINDOW = 360;
-
-    /// @dev The predictions market that provides this pool with next-price distribution data
-    IAloePredictions public immutable PREDICTIONS;
 
     /// @dev The most recent predictions market epoch during which this pool was rebalanced
     uint24 public epoch;
@@ -74,11 +99,10 @@ contract AloePool is AloePoolERC20, UniswapMinter {
         locked = false;
     }
 
-    constructor(address predictions)
-        AloePoolERC20()
-        UniswapMinter(IUniswapV3Pool(IAloePredictionsImmutables(predictions).UNI_POOL()))
+    constructor(address uniPool)
+        AloeBlendERC20()
+        UniswapMinter(IUniswapV3Pool(uniPool))
     {
-        PREDICTIONS = IAloePredictions(predictions);
     }
 
     /**

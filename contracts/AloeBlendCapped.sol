@@ -4,15 +4,15 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./AloePool.sol";
+import "./AloeBlend.sol";
 
-contract AloePoolCapped is AloePool {
+contract AloeBlendCapped is AloeBlend {
     using SafeERC20 for IERC20;
 
     address public immutable MULTISIG;
     uint256 public maxTotalSupply = 100000000000000000000;
 
-    constructor(address predictions, address multisig) AloePool(predictions) {
+    constructor(address predictions, address multisig) AloeBlend(predictions) {
         MULTISIG = multisig;
     }
 
