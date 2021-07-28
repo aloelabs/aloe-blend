@@ -12,7 +12,7 @@ contract AloeBlendCapped is AloeBlend {
     address public immutable MULTISIG;
     uint256 public maxTotalSupply = 100000000000000000000;
 
-    constructor(address predictions, address multisig) AloeBlend(predictions) {
+    constructor(address uniPool, address cToken0, address cToken1, address multisig) AloeBlend(uniPool, cToken0, cToken1) {
         MULTISIG = multisig;
     }
 
@@ -62,11 +62,7 @@ contract AloeBlendCapped is AloeBlend {
         maxTotalSupply = _maxTotalSupply;
     }
 
-    function toggleRebalances() external restricted {
-        allowRebalances = !allowRebalances;
-    }
-
-    function setK(uint48 _K) external restricted {
+    function setK(uint8 _K) external restricted {
         K = _K;
     }
 }

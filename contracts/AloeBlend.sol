@@ -59,6 +59,8 @@ struct PDF {
 contract AloeBlend is AloeBlendERC20, UniswapMinter {
     using SafeERC20 for IERC20;
 
+    using Compound for Compound.Market;
+
     event Deposit(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
 
     event Withdraw(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
@@ -66,37 +68,19 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
     event Snapshot(int24 tick, uint256 totalAmount0, uint256 totalAmount1, uint256 totalSupply);
 
     /// @dev The number of standard deviations to +/- from mean when setting position bounds
-    uint48 public K = 5;
+    uint8 public K = 20;
 
-    /// @dev The number of seconds to look back when computing current price. Makes manipulation harder
-    uint32 public constant CURRENT_PRICE_WINDOW = 360;
-
-    /// @dev The most recent predictions market epoch during which this pool was rebalanced
-    uint24 public epoch;
+    int24 public MIN_WIDTH = 1000; // at minimum, around 2.5% of total inventory will be in Uniswap
 
     /// @dev The elastic position stretches to accomodate unpredictable price movements
     Ticks public elastic;
-
-    /// @dev The cushion position consumes leftover funds after `elastic` is stretched
-    Ticks public cushion;
-
-    /// @dev The excess position is made up of funds that didn't fit into `elastic` when rebalancing
-    Ticks public excess;
-
-    /// @dev The current statistics from prediction market (representing a probability density function)
-    PDF public pdf;
 
     Compound.Market public silo0;
 
     Compound.Market public silo1;
 
-    /// @dev Whether the pool had excess token0 as of the most recent rebalance
-    bool public didHaveExcessToken0;
-
     /// @dev For reentrancy check
     bool private locked;
-
-    bool public allowRebalances = true;
 
     modifier lock() {
         require(!locked, "Aloe: Locked");
@@ -134,60 +118,10 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         inventory1 += TOKEN1.balanceOf(address(this));
     }
 
-    function getNextElasticTicks() public view returns (Ticks memory) {
-        // Define the window over which we want to fetch price
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = CURRENT_PRICE_WINDOW;
-        secondsAgos[1] = 0;
-
-        // Fetch price and account for possible inversion
-        (int56[] memory tickCumulatives, ) = UNI_POOL.observe(secondsAgos);
-        uint176 price =
-            TickMath.getSqrtRatioAtTick(
-                int24((tickCumulatives[1] - tickCumulatives[0]) / int56(uint56(CURRENT_PRICE_WINDOW)))
-            );
-        if (pdf.isInverted) price = type(uint160).max / price;
-        price = uint176(FullMath.mulDiv(price, price, TWO_144));
-
-        return _getNextElasticTicks(price, pdf.mean, pdf.sigmaL, pdf.sigmaU, pdf.isInverted);
-    }
-
-    function _getNextElasticTicks(
-        uint176 price,
-        uint176 mean,
-        uint128 sigmaL,
-        uint128 sigmaU,
-        bool areInverted
-    ) private view returns (Ticks memory ticks) {
-        uint48 n;
-        uint176 widthL;
-        uint176 widthU;
-
-        if (price < mean) {
-            n = uint48((mean - price) / sigmaL);
-            widthL = uint176(sigmaL) * uint176(K + n);
-            widthU = uint176(sigmaU) * uint176(K);
-        } else {
-            n = uint48((price - mean) / sigmaU);
-            widthL = uint176(sigmaL) * uint176(K);
-            widthU = uint176(sigmaU) * uint176(K + n);
-        }
-
-        uint176 l = mean > widthL ? mean - widthL : 1;
-        uint176 u = mean < type(uint176).max - widthU ? mean + widthU : type(uint176).max;
-        uint160 sqrtPriceX96;
-
-        if (areInverted) {
-            sqrtPriceX96 = uint160(uint256(type(uint128).max) / Math.sqrt(u << 80));
-            ticks.lower = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-            sqrtPriceX96 = uint160(uint256(type(uint128).max) / Math.sqrt(l << 80));
-            ticks.upper = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-        } else {
-            sqrtPriceX96 = uint160(Math.sqrt(l << 80) << 32);
-            ticks.lower = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-            sqrtPriceX96 = uint160(Math.sqrt(u << 80) << 32);
-            ticks.upper = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-        }
+    function getNextPositionWidth() public view returns (int24 width) {
+        (uint176 mean, uint176 sigma) = fetchPriceStatistics();
+        width = TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, K * sigma, mean)));
+        if (width < MIN_WIDTH) width = MIN_WIDTH;
     }
 
     /**
@@ -196,7 +130,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
      * Uniswap until the next rebalance. Also note it's not necessary to check
      * if user manipulated price to deposit cheaper, as the value of range
      * orders can only by manipulated higher.
-     * @dev LOCK MODIFIER IS APPLIED IN AloePoolCapped!!!
+     * @dev LOCK MODIFIER IS APPLIED IN AloeBlendCapped!!!
      * @param amount0Max Max amount of TOKEN0 to deposit
      * @param amount1Max Max amount of TOKEN1 to deposit
      * @param amount0Min Ensure `amount0` is greater than this
@@ -348,17 +282,15 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
     }
 
     function rebalance() external lock {
-        require(allowRebalances, "Disabled");
-
-        int24 tickSpacing = TICK_SPACING;
         (uint160 sqrtPriceX96, int24 tick, , , , , ) = UNI_POOL.slot0();
-        uint224 priceX96 = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, TWO_96);
-
-        int24 b = 500;
+        uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, TWO_96));
+        int24 w = getNextPositionWidth() >> 1;
+        uint96 magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-w));
+        uint128 liquidity;
 
         // Exit current Uniswap positions
         {
-            (uint128 liquidity, , , , ) = _position(elastic);
+            (liquidity, , , , ) = _position(elastic);
             _uniswapExit(elastic, liquidity);
         }
 
@@ -366,11 +298,9 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         uint256 amount0;
         uint256 amount1;
         if (FullMath.mulDiv(inventory0, priceX96, TWO_96) > inventory1) {
-            uint96 magic = TWO_96 - TickMath.getSqrtRatioAtTick(-b);
             amount1 = FullMath.mulDiv(inventory1, magic, TWO_96);
             amount0 = FullMath.mulDiv(amount1, TWO_96, priceX96);
         } else {
-            uint96 magic = TWO_96 - TickMath.getSqrtRatioAtTick(-b);
             amount0 = FullMath.mulDiv(inventory0, magic, TWO_96);
             amount1 = FullMath.mulDiv(amount0, priceX96, TWO_96);
         }
@@ -384,8 +314,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         if (!hasExcessToken1) silo1.withdraw(amount1 - balance1);
 
         // Place elastic order on Uniswap
-        Ticks memory elasticNew = _coerceTicksToSpacing(Ticks(tick - b, tick + b));
-        uint128 liquidity = _liquidityForAmounts(elasticNew, sqrtPriceX96, balance0, balance1);
+        Ticks memory elasticNew = _coerceTicksToSpacing(Ticks(tick - w, tick + w));
+        liquidity = _liquidityForAmounts(elasticNew, sqrtPriceX96, amount0, amount1);
         delete lastMintedAmount0;
         delete lastMintedAmount1;
         _uniswapEnter(elasticNew, liquidity);
@@ -396,98 +326,55 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         if (hasExcessToken1) silo1.deposit(inventory1 - lastMintedAmount1);
     }
 
-    function shouldStretch() external view returns (bool) {
-        Ticks memory elasticNew = _coerceTicksToSpacing(getNextElasticTicks());
-        return elasticNew.lower != elastic.lower || elasticNew.upper != elastic.upper;
-    }
-
-    function stretch() external lock {
-        require(allowRebalances, "Disabled");
-        int24 tickSpacing = TICK_SPACING;
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = UNI_POOL.slot0();
-
-        // Check if stretching is necessary
-        Ticks memory elasticNew = _coerceTicksToSpacing(getNextElasticTicks());
-        require(elasticNew.lower != elastic.lower || elasticNew.upper != elastic.upper, "Aloe: Already stretched");
-
-        // Exit previous elastic and cushion, and place as much value as possible in new elastic
-        (uint256 elastic0, uint256 elastic1, , , uint256 available0, uint256 available1) =
-            _exit2Enter1(sqrtPriceX96, elastic, cushion, elasticNew);
-        elastic = elasticNew;
-
-        // Place new cushion
-        Ticks memory active = _coerceTicksToSpacing(Ticks(tick, tick));
-        if (lastMintedAmount0 * elastic1 < lastMintedAmount1 * elastic0) {
-            _placeCushionUpper(active, available0, tickSpacing);
-        } else {
-            _placeCushionLower(active, available1, tickSpacing);
-        }
-    }
-
-    function snipe() external lock {
-        require(allowRebalances, "Disabled");
-        int24 tickSpacing = TICK_SPACING;
-        (uint160 sqrtPriceX96, int24 tick, , , , uint8 feeProtocol, ) = UNI_POOL.slot0();
-
-        (
-            uint256 excess0,
-            uint256 excess1,
-            uint256 maxReward0,
-            uint256 maxReward1,
-            uint256 available0,
-            uint256 available1
-        ) = _exit2Enter1(sqrtPriceX96, excess, cushion, elastic);
-
-        Ticks memory active = _coerceTicksToSpacing(Ticks(tick, tick));
-        uint128 reward = UNI_FEE;
-
-        if (didHaveExcessToken0) {
-            // Reward caller
-            if (feeProtocol >> 4 != 0) reward -= UNI_FEE / (feeProtocol >> 4);
-            reward = (uint128(excess1) * reward) / 1e6;
-            assert(reward <= maxReward1);
-            if (reward != 0) TOKEN1.safeTransfer(msg.sender, reward);
-
-            // Replace excess and cushion positions
-            if (excess0 >= available0) {
-                // We converted so much token0 to token1 that the cushion has to go
-                // on the other side now
-                _placeExcessUpper(active, available0, tickSpacing);
-                _placeCushionLower(active, available1, tickSpacing);
-            } else {
-                // Both excess and cushion still have token0 to eat through
-                _placeExcessUpper(active, excess0, tickSpacing);
-                _placeCushionUpper(active, available0 - excess0, tickSpacing);
-            }
-        } else {
-            // Reward caller
-            if (feeProtocol % 16 != 0) reward -= UNI_FEE / (feeProtocol % 16);
-            reward = (uint128(excess0) * reward) / 1e6;
-            assert(reward <= maxReward0);
-            if (reward != 0) TOKEN0.safeTransfer(msg.sender, reward);
-
-            // Replace excess and cushion positions
-            if (excess1 >= available1) {
-                // We converted so much token1 to token0 that the cushion has to go
-                // on the other side now
-                _placeExcessLower(active, available1, tickSpacing);
-                _placeCushionUpper(active, available0, tickSpacing);
-            } else {
-                // Both excess and cushion still have token1 to eat through
-                _placeExcessLower(active, excess1, tickSpacing);
-                _placeCushionLower(active, available1 - excess1, tickSpacing);
-            }
-        }
-    }
-
     function _coerceTicksToSpacing(Ticks memory ticks) private view returns (Ticks memory ticksCoerced) {
+        int24 tickSpacing = TICK_SPACING;
         ticksCoerced.lower =
             ticks.lower -
-            (ticks.lower < 0 ? TICK_SPACING + (ticks.lower % TICK_SPACING) : ticks.lower % TICK_SPACING);
+            (ticks.lower < 0 ? tickSpacing + (ticks.lower % tickSpacing) : ticks.lower % tickSpacing);
         ticksCoerced.upper =
             ticks.upper +
-            (ticks.upper < 0 ? -ticks.upper % TICK_SPACING : TICK_SPACING - (ticks.upper % TICK_SPACING));
+            (ticks.upper < 0 ? -ticks.upper % tickSpacing : tickSpacing - (ticks.upper % tickSpacing));
         assert(ticksCoerced.lower <= ticks.lower);
         assert(ticksCoerced.upper >= ticks.upper);
+    }
+
+    function fetchPriceStatistics() public view returns (uint176 mean, uint176 sigma) {
+        (int56[] memory tickCumulatives, ) = UNI_POOL.observe(selectedOracleTimetable());
+
+        // Compute mean price over the entire 54 minute period
+        mean = TickMath.getSqrtRatioAtTick(int24((tickCumulatives[9] - tickCumulatives[0]) / 3240));
+        mean = uint176(FullMath.mulDiv(mean, mean, TWO_144));
+
+        // `stat` variable will take on a few different statistical values
+        // Here it's MAD (Mean Absolute Deviation), except not yet divided by number of samples
+        uint184 stat;
+        uint176 sample;
+
+        for (uint8 i = 0; i < 9; i++) {
+            // Compute mean price over a 6 minute period
+            sample = TickMath.getSqrtRatioAtTick(int24((tickCumulatives[i + 1] - tickCumulatives[i]) / 360));
+            sample = uint176(FullMath.mulDiv(sample, sample, TWO_144));
+
+            // Accumulate
+            stat += sample > mean ? sample - mean : mean - sample;
+        }
+
+        // MAD = stat / n, here n = 10
+        // STDDEV = MAD * sqrt(2/pi) for a normal distribution
+        sigma = uint176((uint256(stat) * 79788) / 1000000);
+    }
+
+    function selectedOracleTimetable() public pure returns (uint32[] memory secondsAgos) {
+        secondsAgos = new uint32[](10);
+        secondsAgos[0] = 3420;
+        secondsAgos[1] = 3060;
+        secondsAgos[2] = 2700;
+        secondsAgos[3] = 2340;
+        secondsAgos[4] = 1980;
+        secondsAgos[5] = 1620;
+        secondsAgos[6] = 1260;
+        secondsAgos[7] = 900;
+        secondsAgos[8] = 540;
+        secondsAgos[9] = 180;
     }
 }
