@@ -11,6 +11,7 @@ import "./libraries/FullMath.sol";
 import "./libraries/LiquidityAmounts.sol";
 import "./libraries/Math.sol";
 import "./libraries/TickMath.sol";
+import "./libraries/Uniswap.sol";
 
 import "./AloeBlendERC20.sol";
 import "./UniswapMinter.sol";
@@ -49,15 +50,10 @@ import "./UniswapMinter.sol";
 uint256 constant TWO_96 = 2**96;
 uint256 constant TWO_144 = 2**144;
 
-struct PDF {
-    bool isInverted;
-    uint176 mean;
-    uint128 sigmaL;
-    uint128 sigmaU;
-}
-
 contract AloeBlend is AloeBlendERC20, UniswapMinter {
     using SafeERC20 for IERC20;
+
+    using Uniswap for Uniswap.Position;
 
     using Compound for Compound.Market;
 
@@ -70,10 +66,10 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
     /// @dev The number of standard deviations to +/- from mean when setting position bounds
     uint8 public K = 20;
 
-    int24 public MIN_WIDTH = 1000; // at minimum, around 2.5% of total inventory will be in Uniswap
+    /// @dev The minimum width (in ticks) of the Uniswap position. 1000 --> 2.5% of total inventory
+    int24 public MIN_WIDTH = 1000;
 
-    /// @dev The elastic position stretches to accomodate unpredictable price movements
-    Ticks public elastic;
+    Uniswap.Position public combine;
 
     Compound.Market public silo0;
 
@@ -94,10 +90,12 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         require(msg.sender == address(WETH) || msg.sender == address(Compound.CETH));
     }
 
-    constructor(address uniPool, address cToken0, address cToken1)
-        AloeBlendERC20()
-        UniswapMinter(IUniswapV3Pool(uniPool))
-    {
+    constructor(
+        IUniswapV3Pool uniPool,
+        address cToken0,
+        address cToken1
+    ) AloeBlendERC20() UniswapMinter(uniPool) {
+        combine.pool = uniPool;
         silo0.initialize(cToken0);
         silo1.initialize(cToken1);
     }
@@ -109,7 +107,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
      */
     function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
         // Everything in Uniswap
-        (inventory0, inventory1) = _collectableAmountsAsOfLastPoke(elastic);
+        (inventory0, inventory1) = combine.collectableAmountsAsOfLastPoke();
         // Everything in Compound
         inventory0 += silo0.getBalance();
         inventory1 += silo1.getBalance();
@@ -155,7 +153,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
     {
         require(amount0Max != 0 || amount1Max != 0, "Aloe: 0 deposit");
 
-        _uniswapPoke(elastic);
+        combine.poke();
         silo0.poke();
         silo1.poke();
 
@@ -231,21 +229,26 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
     ) external lock returns (uint256 amount0, uint256 amount1) {
         require(shares != 0, "Aloe: 0 shares");
         uint256 totalSupply = totalSupply() + 1;
+        uint256 temp0;
+        uint256 temp1;
+
+        // Portion from contract
+        // NOTE: Must be done FIRST to ensure we don't double count things after exiting Uniswap/Compound
+        amount0 = FullMath.mulDiv(TOKEN0.balanceOf(address(this)), shares, totalSupply);
+        amount1 = FullMath.mulDiv(TOKEN1.balanceOf(address(this)), shares, totalSupply);
 
         // Portion from Uniswap
-        (amount0, amount1) = _uniswapExitFraction(shares, totalSupply, elastic);
+        (temp0, temp1) = combine.withdrawFraction(shares, totalSupply);
+        amount0 += temp0;
+        amount1 += temp1;
 
         // Portion from Compound
-        uint256 temp0 = FullMath.mulDiv(silo0.getBalance(), shares, totalSupply);
-        uint256 temp1 = FullMath.mulDiv(silo1.getBalance(), shares, totalSupply);
+        temp0 = FullMath.mulDiv(silo0.getBalance(), shares, totalSupply);
+        temp1 = FullMath.mulDiv(silo1.getBalance(), shares, totalSupply);
         silo0.withdraw(temp0);
         silo1.withdraw(temp1);
         amount0 += temp0;
         amount1 += temp1;
-
-        // Portion from contract
-        amount0 += FullMath.mulDiv(TOKEN0.balanceOf(address(this)), shares, totalSupply);
-        amount1 += FullMath.mulDiv(TOKEN1.balanceOf(address(this)), shares, totalSupply);
 
         // Check constraints
         require(amount0 >= amount0Min, "Aloe: amount0 too low");
@@ -260,38 +263,18 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         emit Withdraw(msg.sender, shares, amount0, amount1);
     }
 
-    /// @dev Withdraws share of liquidity in a range from Uniswap pool. All fee earnings
-    /// will be collected and left unused afterwards
-    function _uniswapExitFraction(
-        uint256 numerator,
-        uint256 denominator,
-        Ticks memory ticks
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        assert(numerator < denominator);
-
-        (uint128 liquidity, , , , ) = _position(ticks);
-        liquidity = uint128(FullMath.mulDiv(liquidity, numerator, denominator));
-
-        uint256 earned0;
-        uint256 earned1;
-        (amount0, amount1, earned0, earned1) = _uniswapExit(ticks, liquidity);
-
-        // Add share of fees
-        amount0 += FullMath.mulDiv(earned0, numerator, denominator);
-        amount1 += FullMath.mulDiv(earned1, numerator, denominator);
-    }
-
     function rebalance() external lock {
         (uint160 sqrtPriceX96, int24 tick, , , , , ) = UNI_POOL.slot0();
         uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, TWO_96));
         int24 w = getNextPositionWidth() >> 1;
         uint96 magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-w));
-        uint128 liquidity;
 
-        // Exit current Uniswap positions
+        Uniswap.Position memory _combine = combine;
+
+        // Exit current Uniswap position
         {
-            (liquidity, , , , ) = _position(elastic);
-            _uniswapExit(elastic, liquidity);
+            (uint128 liquidity, , , , ) = _combine.info();
+            _combine.withdraw(liquidity);
         }
 
         (uint256 inventory0, uint256 inventory1) = getInventory();
@@ -313,29 +296,28 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         if (!hasExcessToken0) silo0.withdraw(amount0 - balance0);
         if (!hasExcessToken1) silo1.withdraw(amount1 - balance1);
 
-        // Place elastic order on Uniswap
-        Ticks memory elasticNew = _coerceTicksToSpacing(Ticks(tick - w, tick + w));
-        liquidity = _liquidityForAmounts(elasticNew, sqrtPriceX96, amount0, amount1);
+        // Update combine's ticks
+        _combine.lower = tick - w;
+        _combine.upper = tick + w;
+        _combine = _coerceTicksToSpacing(_combine);
+        combine.lower = _combine.lower;
+        combine.upper = _combine.upper;
+
+        // Place some liquidity in Uniswap
         delete lastMintedAmount0;
         delete lastMintedAmount1;
-        _uniswapEnter(elasticNew, liquidity);
-        elastic = elasticNew;
+        _combine.deposit(_combine.liquidityForAmounts(sqrtPriceX96, amount0, amount1));
 
         // Place excess into Compound
         if (hasExcessToken0) silo0.deposit(inventory0 - lastMintedAmount0);
         if (hasExcessToken1) silo1.deposit(inventory1 - lastMintedAmount1);
     }
 
-    function _coerceTicksToSpacing(Ticks memory ticks) private view returns (Ticks memory ticksCoerced) {
+    function _coerceTicksToSpacing(Uniswap.Position memory p) private view returns (Uniswap.Position memory) {
         int24 tickSpacing = TICK_SPACING;
-        ticksCoerced.lower =
-            ticks.lower -
-            (ticks.lower < 0 ? tickSpacing + (ticks.lower % tickSpacing) : ticks.lower % tickSpacing);
-        ticksCoerced.upper =
-            ticks.upper +
-            (ticks.upper < 0 ? -ticks.upper % tickSpacing : tickSpacing - (ticks.upper % tickSpacing));
-        assert(ticksCoerced.lower <= ticks.lower);
-        assert(ticksCoerced.upper >= ticks.upper);
+        p.lower = p.lower - (p.lower < 0 ? tickSpacing + (p.lower % tickSpacing) : p.lower % tickSpacing);
+        p.upper = p.upper + (p.upper < 0 ? -p.upper % tickSpacing : tickSpacing - (p.upper % tickSpacing));
+        return p;
     }
 
     function fetchPriceStatistics() public view returns (uint176 mean, uint176 sigma) {

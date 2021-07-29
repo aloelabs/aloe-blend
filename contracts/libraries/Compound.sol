@@ -29,11 +29,11 @@ library Compound {
         }
     }
 
-    function poke(Market storage market) internal {
+    function poke(Market memory market) internal {
         CERC20(market.cToken).accrueInterest();
     }
 
-    function deposit(Market storage market, uint amount) internal {
+    function deposit(Market memory market, uint amount) internal {
         if (market.cToken == address(CETH)) {
             WETH.withdraw(amount);
             CETH.mint{ value: amount }();
@@ -43,7 +43,7 @@ library Compound {
         }
     }
 
-    function withdraw(Market storage market, uint amount) internal {
+    function withdraw(Market memory market, uint amount) internal {
         if (market.cToken == address(CETH)) {
             require(CETH.redeemUnderlying(amount) == 0, "Compound: redeem failed");
             WETH.deposit{ value: amount }();
@@ -52,7 +52,7 @@ library Compound {
         }
     }
 
-    function getBalance(Market storage market) internal view returns (uint256 balance) {
+    function getBalance(Market memory market) internal view returns (uint256 balance) {
         CERC20 cToken = CERC20(market.cToken);
         return cToken.balanceOf(address(this)) * cToken.exchangeRateStored();
     }
