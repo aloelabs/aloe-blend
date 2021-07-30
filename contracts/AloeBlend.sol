@@ -192,14 +192,25 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         emit Withdraw(msg.sender, shares, amount0, amount1);
     }
 
+    struct RebalanceCache{
+        uint160 sqrtPriceX96;
+        uint96 magic;
+        int24 tick;
+        int24 w;
+        uint224 priceX96;
+    }
+
     /// @inheritdoc IAloeBlendActions
     function rebalance() external override lock {
         Uniswap.Position memory _combine = combine;
+        RebalanceCache memory cache;
 
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = _combine.pool.slot0();
-        uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, TWO_96));
-        int24 w = getNextPositionWidth() >> 1;
-        uint96 magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-w));
+        // Get current tick & price
+        (cache.sqrtPriceX96, cache.tick, , , , , ) = _combine.pool.slot0();
+        cache.priceX96 = uint224(FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, TWO_96));
+        // Get new position width & inventory usage fraction
+        cache.w = getNextPositionWidth() >> 1;
+        cache.magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-cache.w));
 
         // Exit current Uniswap position
         {
@@ -207,15 +218,16 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             _combine.withdraw(liquidity);
         }
 
-        (uint256 inventory0, uint256 inventory1) = getInventory();
+        // Compute amounts that should be placed in Uniswap position
         uint256 amount0;
         uint256 amount1;
-        if (FullMath.mulDiv(inventory0, priceX96, TWO_96) > inventory1) {
-            amount1 = FullMath.mulDiv(inventory1, magic, TWO_96);
-            amount0 = FullMath.mulDiv(amount1, TWO_96, priceX96);
+        (uint256 inventory0, uint256 inventory1) = getInventory();
+        if (FullMath.mulDiv(inventory0, cache.priceX96, TWO_96) > inventory1) {
+            amount1 = FullMath.mulDiv(inventory1, cache.magic, TWO_96);
+            amount0 = FullMath.mulDiv(amount1, TWO_96, cache.priceX96);
         } else {
-            amount0 = FullMath.mulDiv(inventory0, magic, TWO_96);
-            amount1 = FullMath.mulDiv(amount0, priceX96, TWO_96);
+            amount0 = FullMath.mulDiv(inventory0, cache.magic, TWO_96);
+            amount1 = FullMath.mulDiv(amount0, cache.priceX96, TWO_96);
         }
 
         uint256 balance0 = TOKEN0.balanceOf(address(this));
@@ -227,8 +239,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         if (!hasExcessToken1) silo1.withdraw(amount1 - balance1);
 
         // Update combine's ticks
-        _combine.lower = tick - w;
-        _combine.upper = tick + w;
+        _combine.lower = cache.tick - cache.w;
+        _combine.upper = cache.tick + cache.w;
         _combine = _coerceTicksToSpacing(_combine);
         combine.lower = _combine.lower;
         combine.upper = _combine.upper;
@@ -236,13 +248,13 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         // Place some liquidity in Uniswap
         delete lastMintedAmount0;
         delete lastMintedAmount1;
-        _combine.deposit(_combine.liquidityForAmounts(sqrtPriceX96, amount0, amount1));
+        _combine.deposit(_combine.liquidityForAmounts(cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into Compound
         if (hasExcessToken0) silo0.deposit(inventory0 - lastMintedAmount0);
         if (hasExcessToken1) silo1.deposit(inventory1 - lastMintedAmount1);
 
-        emit Rebalance(_combine.lower, _combine.upper, magic, inventory0, inventory1);
+        emit Rebalance(_combine.lower, _combine.upper, cache.magic, inventory0, inventory1);
     }
 
     /// @inheritdoc IAloeBlendDerivedState
