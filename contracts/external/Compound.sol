@@ -32,20 +32,20 @@ library Compound {
         CERC20(market.cToken).accrueInterest();
     }
 
-    function deposit(Market memory market, uint amount) internal {
+    function deposit(Market memory market, uint256 amount) internal {
         if (market.cToken == address(CETH)) {
             WETH.withdraw(amount);
-            CETH.mint{ value: amount }();
+            CETH.mint{value: amount}();
         } else {
             _approve(market.uToken, address(market.cToken), amount);
             require(CERC20(market.cToken).mint(amount) == 0, "Compound: mint failed");
         }
     }
 
-    function withdraw(Market memory market, uint amount) internal {
+    function withdraw(Market memory market, uint256 amount) internal {
         if (market.cToken == address(CETH)) {
             require(CETH.redeemUnderlying(amount) == 0, "Compound: redeem failed");
-            WETH.deposit{ value: amount }();
+            WETH.deposit{value: amount}();
         } else {
             require(CERC20(market.cToken).redeemUnderlying(amount) == 0, "Compound: redeem failed");
         }
@@ -56,7 +56,11 @@ library Compound {
         return cToken.balanceOf(address(this)) * cToken.exchangeRateStored();
     }
 
-    function _approve(address token, address spender, uint256 amount) private {
+    function _approve(
+        address token,
+        address spender,
+        uint256 amount
+    ) private {
         // 200 gas to read uint256
         if (IERC20(token).allowance(address(this), spender) < amount) {
             // 20000 gas to write uint256 if changing from zero to non-zero

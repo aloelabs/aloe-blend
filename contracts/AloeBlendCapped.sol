@@ -12,7 +12,12 @@ contract AloeBlendCapped is AloeBlend {
     address public immutable MULTISIG;
     uint256 public maxTotalSupply = 100000000000000000000;
 
-    constructor(IUniswapV3Pool uniPool, address cToken0, address cToken1, address multisig) AloeBlend(uniPool, cToken0, cToken1) {
+    constructor(
+        IUniswapV3Pool uniPool,
+        address cToken0,
+        address cToken1,
+        address multisig
+    ) AloeBlend(uniPool, cToken0, cToken1) {
         MULTISIG = multisig;
     }
 

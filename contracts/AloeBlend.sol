@@ -55,7 +55,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     using Compound for Compound.Market;
 
     /// @inheritdoc IAloeBlendImmutables
-    int24 public override constant MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
+    int24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
     /// @inheritdoc IAloeBlendState
     uint8 public override K = 20;
@@ -95,7 +95,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getInventory() public override view returns (uint256 inventory0, uint256 inventory1) {
+    function getInventory() public view override returns (uint256 inventory0, uint256 inventory1) {
         // Everything in Uniswap
         (inventory0, inventory1) = combine.collectableAmountsAsOfLastPoke();
         // Everything in Compound
@@ -107,7 +107,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getNextPositionWidth() public override view returns (int24 width) {
+    function getNextPositionWidth() public view override returns (int24 width) {
         (uint176 mean, uint176 sigma) = fetchPriceStatistics();
         width = TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, K * sigma, mean)));
         if (width < MIN_WIDTH) width = MIN_WIDTH;
@@ -122,8 +122,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint256 amount1Min
     )
         public
-        override
         virtual
+        override
         returns (
             uint256 shares,
             uint256 amount0,
@@ -192,7 +192,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         emit Withdraw(msg.sender, shares, amount0, amount1);
     }
 
-    struct RebalanceCache{
+    struct RebalanceCache {
         uint160 sqrtPriceX96;
         uint96 magic;
         int24 tick;
@@ -258,7 +258,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function fetchPriceStatistics() public override view returns (uint176 mean, uint176 sigma) {
+    function fetchPriceStatistics() public view override returns (uint176 mean, uint176 sigma) {
         (int56[] memory tickCumulatives, ) = UNI_POOL.observe(selectedOracleTimetable());
 
         // Compute mean price over the entire 54 minute period
@@ -285,7 +285,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function selectedOracleTimetable() public override pure returns (uint32[] memory secondsAgos) {
+    function selectedOracleTimetable() public pure override returns (uint32[] memory secondsAgos) {
         secondsAgos = new uint32[](10);
         secondsAgos[0] = 3420;
         secondsAgos[1] = 3060;
