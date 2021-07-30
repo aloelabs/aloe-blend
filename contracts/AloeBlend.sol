@@ -4,14 +4,13 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-
-import "./libraries/Compound.sol";
 import "./libraries/FullMath.sol";
-import "./libraries/LiquidityAmounts.sol";
-import "./libraries/Math.sol";
 import "./libraries/TickMath.sol";
-import "./libraries/Uniswap.sol";
+
+import "./external/Compound.sol";
+import "./external/Uniswap.sol";
+
+import "./interfaces/IAloeBlend.sol";
 
 import "./AloeBlendERC20.sol";
 import "./UniswapMinter.sol";
@@ -50,30 +49,25 @@ import "./UniswapMinter.sol";
 uint256 constant TWO_96 = 2**96;
 uint256 constant TWO_144 = 2**144;
 
-contract AloeBlend is AloeBlendERC20, UniswapMinter {
+contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     using SafeERC20 for IERC20;
-
     using Uniswap for Uniswap.Position;
-
     using Compound for Compound.Market;
 
-    event Deposit(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
+    /// @inheritdoc IAloeBlendImmutables
+    int24 public override constant MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
-    event Withdraw(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
+    /// @inheritdoc IAloeBlendState
+    uint8 public override K = 20;
 
-    event Snapshot(int24 tick, uint256 totalAmount0, uint256 totalAmount1, uint256 totalSupply);
+    /// @inheritdoc IAloeBlendState
+    Uniswap.Position public override combine;
 
-    /// @dev The number of standard deviations to +/- from mean when setting position bounds
-    uint8 public K = 20;
+    /// @inheritdoc IAloeBlendState
+    Compound.Market public override silo0;
 
-    /// @dev The minimum width (in ticks) of the Uniswap position. 1000 --> 2.5% of total inventory
-    int24 public MIN_WIDTH = 1000;
-
-    Uniswap.Position public combine;
-
-    Compound.Market public silo0;
-
-    Compound.Market public silo1;
+    /// @inheritdoc IAloeBlendState
+    Compound.Market public override silo1;
 
     /// @dev For reentrancy check
     bool private locked;
@@ -100,12 +94,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         silo1.initialize(cToken1);
     }
 
-    /**
-     * @notice Calculates the vault's total holdings of TOKEN0 and TOKEN1 - in
-     * other words, how much of each token the vault would hold if it withdrew
-     * all its liquidity from Uniswap and Compound.
-     */
-    function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
+    /// @inheritdoc IAloeBlendDerivedState
+    function getInventory() public override view returns (uint256 inventory0, uint256 inventory1) {
         // Everything in Uniswap
         (inventory0, inventory1) = combine.collectableAmountsAsOfLastPoke();
         // Everything in Compound
@@ -116,27 +106,15 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         inventory1 += TOKEN1.balanceOf(address(this));
     }
 
-    function getNextPositionWidth() public view returns (int24 width) {
+    /// @inheritdoc IAloeBlendDerivedState
+    function getNextPositionWidth() public override view returns (int24 width) {
         (uint176 mean, uint176 sigma) = fetchPriceStatistics();
         width = TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, K * sigma, mean)));
         if (width < MIN_WIDTH) width = MIN_WIDTH;
     }
 
-    /**
-     * @notice Deposits tokens in proportion to the vault's current holdings.
-     * @dev These tokens sit in the vault and are not used for liquidity on
-     * Uniswap until the next rebalance. Also note it's not necessary to check
-     * if user manipulated price to deposit cheaper, as the value of range
-     * orders can only by manipulated higher.
-     * @dev LOCK MODIFIER IS APPLIED IN AloeBlendCapped!!!
-     * @param amount0Max Max amount of TOKEN0 to deposit
-     * @param amount1Max Max amount of TOKEN1 to deposit
-     * @param amount0Min Ensure `amount0` is greater than this
-     * @param amount1Min Ensure `amount1` is greater than this
-     * @return shares Number of shares minted
-     * @return amount0 Amount of TOKEN0 deposited
-     * @return amount1 Amount of TOKEN1 deposited
-     */
+    /// @inheritdoc IAloeBlendActions
+    /// @dev LOCK MODIFIER IS APPLIED IN AloeBlendCapped!!!
     function deposit(
         uint256 amount0Max,
         uint256 amount1Max,
@@ -144,6 +122,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         uint256 amount1Min
     )
         public
+        override
         virtual
         returns (
             uint256 shares,
@@ -171,62 +150,12 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         emit Deposit(msg.sender, shares, amount0, amount1);
     }
 
-    /// @dev Calculates the largest possible `amount0` and `amount1` such that
-    /// they're in the same proportion as total amounts, but not greater than
-    /// `amount0Max` and `amount1Max` respectively.
-    function _computeLPShares(uint256 amount0Max, uint256 amount1Max)
-        internal
-        view
-        returns (
-            uint256 shares,
-            uint256 amount0,
-            uint256 amount1
-        )
-    {
-        uint256 totalSupply = totalSupply();
-        (uint256 inventory0, uint256 inventory1) = getInventory();
-
-        // If total supply > 0, pool can't be empty
-        assert(totalSupply == 0 || inventory0 != 0 || inventory1 != 0);
-
-        if (totalSupply == 0) {
-            // For first deposit, just use the amounts desired
-            amount0 = amount0Max;
-            amount1 = amount1Max;
-            shares = amount0 > amount1 ? amount0 : amount1; // max
-        } else if (inventory0 == 0) {
-            amount1 = amount1Max;
-            shares = FullMath.mulDiv(amount1, totalSupply, inventory1);
-        } else if (inventory1 == 0) {
-            amount0 = amount0Max;
-            shares = FullMath.mulDiv(amount0, totalSupply, inventory0);
-        } else {
-            amount0 = FullMath.mulDiv(amount1Max, inventory0, inventory1);
-
-            if (amount0 < amount0Max) {
-                amount1 = amount1Max;
-                shares = FullMath.mulDiv(amount1, totalSupply, inventory1);
-            } else {
-                amount0 = amount0Max;
-                amount1 = FullMath.mulDiv(amount0, inventory1, inventory0);
-                shares = FullMath.mulDiv(amount0, totalSupply, inventory0);
-            }
-        }
-    }
-
-    /**
-     * @notice Withdraws tokens in proportion to the vault's holdings.
-     * @param shares Shares burned by sender
-     * @param amount0Min Revert if resulting `amount0` is smaller than this
-     * @param amount1Min Revert if resulting `amount1` is smaller than this
-     * @return amount0 Amount of TOKEN0 sent to recipient
-     * @return amount1 Amount of TOKEN1 sent to recipient
-     */
+    /// @inheritdoc IAloeBlendActions
     function withdraw(
         uint256 shares,
         uint256 amount0Min,
         uint256 amount1Min
-    ) external lock returns (uint256 amount0, uint256 amount1) {
+    ) external override lock returns (uint256 amount0, uint256 amount1) {
         require(shares != 0, "Aloe: 0 shares");
         uint256 totalSupply = totalSupply() + 1;
         uint256 temp0;
@@ -263,13 +192,14 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         emit Withdraw(msg.sender, shares, amount0, amount1);
     }
 
-    function rebalance() external lock {
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = UNI_POOL.slot0();
+    /// @inheritdoc IAloeBlendActions
+    function rebalance() external override lock {
+        Uniswap.Position memory _combine = combine;
+
+        (uint160 sqrtPriceX96, int24 tick, , , , , ) = _combine.pool.slot0();
         uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, TWO_96));
         int24 w = getNextPositionWidth() >> 1;
         uint96 magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-w));
-
-        Uniswap.Position memory _combine = combine;
 
         // Exit current Uniswap position
         {
@@ -311,16 +241,12 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         // Place excess into Compound
         if (hasExcessToken0) silo0.deposit(inventory0 - lastMintedAmount0);
         if (hasExcessToken1) silo1.deposit(inventory1 - lastMintedAmount1);
+
+        emit Rebalance(_combine.lower, _combine.upper, magic, inventory0, inventory1);
     }
 
-    function _coerceTicksToSpacing(Uniswap.Position memory p) private view returns (Uniswap.Position memory) {
-        int24 tickSpacing = TICK_SPACING;
-        p.lower = p.lower - (p.lower < 0 ? tickSpacing + (p.lower % tickSpacing) : p.lower % tickSpacing);
-        p.upper = p.upper + (p.upper < 0 ? -p.upper % tickSpacing : tickSpacing - (p.upper % tickSpacing));
-        return p;
-    }
-
-    function fetchPriceStatistics() public view returns (uint176 mean, uint176 sigma) {
+    /// @inheritdoc IAloeBlendDerivedState
+    function fetchPriceStatistics() public override view returns (uint176 mean, uint176 sigma) {
         (int56[] memory tickCumulatives, ) = UNI_POOL.observe(selectedOracleTimetable());
 
         // Compute mean price over the entire 54 minute period
@@ -346,7 +272,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         sigma = uint176((uint256(stat) * 79788) / 1000000);
     }
 
-    function selectedOracleTimetable() public pure returns (uint32[] memory secondsAgos) {
+    /// @inheritdoc IAloeBlendDerivedState
+    function selectedOracleTimetable() public override pure returns (uint32[] memory secondsAgos) {
         secondsAgos = new uint32[](10);
         secondsAgos[0] = 3420;
         secondsAgos[1] = 3060;
@@ -358,5 +285,55 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter {
         secondsAgos[7] = 900;
         secondsAgos[8] = 540;
         secondsAgos[9] = 180;
+    }
+
+    /// @dev Calculates the largest possible `amount0` and `amount1` such that
+    /// they're in the same proportion as total amounts, but not greater than
+    /// `amount0Max` and `amount1Max` respectively.
+    function _computeLPShares(uint256 amount0Max, uint256 amount1Max)
+        private
+        view
+        returns (
+            uint256 shares,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        uint256 totalSupply = totalSupply();
+        (uint256 inventory0, uint256 inventory1) = getInventory();
+
+        // If total supply > 0, pool can't be empty
+        assert(totalSupply == 0 || inventory0 != 0 || inventory1 != 0);
+
+        if (totalSupply == 0) {
+            // For first deposit, just use the amounts desired
+            amount0 = amount0Max;
+            amount1 = amount1Max;
+            shares = amount0 > amount1 ? amount0 : amount1; // max
+        } else if (inventory0 == 0) {
+            amount1 = amount1Max;
+            shares = FullMath.mulDiv(amount1, totalSupply, inventory1);
+        } else if (inventory1 == 0) {
+            amount0 = amount0Max;
+            shares = FullMath.mulDiv(amount0, totalSupply, inventory0);
+        } else {
+            amount0 = FullMath.mulDiv(amount1Max, inventory0, inventory1);
+
+            if (amount0 < amount0Max) {
+                amount1 = amount1Max;
+                shares = FullMath.mulDiv(amount1, totalSupply, inventory1);
+            } else {
+                amount0 = amount0Max;
+                amount1 = FullMath.mulDiv(amount0, inventory1, inventory0);
+                shares = FullMath.mulDiv(amount0, totalSupply, inventory0);
+            }
+        }
+    }
+
+    function _coerceTicksToSpacing(Uniswap.Position memory p) private view returns (Uniswap.Position memory) {
+        int24 tickSpacing = TICK_SPACING;
+        p.lower = p.lower - (p.lower < 0 ? tickSpacing + (p.lower % tickSpacing) : p.lower % tickSpacing);
+        p.upper = p.upper + (p.upper < 0 ? -p.upper % tickSpacing : tickSpacing - (p.upper % tickSpacing));
+        return p;
     }
 }
