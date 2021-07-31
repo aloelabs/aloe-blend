@@ -235,6 +235,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         bool hasExcessToken0 = balance0 > amount0;
         bool hasExcessToken1 = balance1 > amount1;
 
+        // Because of cToken exchangeRate rounding, we may withdraw too much
+        // here. That's okay; dust will just sit in contract till next rebalance
         if (!hasExcessToken0) silo0.withdraw(amount0 - balance0);
         if (!hasExcessToken1) silo1.withdraw(amount1 - balance1);
 
@@ -251,8 +253,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         _combine.deposit(_combine.liquidityForAmounts(cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into Compound
-        if (hasExcessToken0) silo0.deposit(inventory0 - lastMintedAmount0);
-        if (hasExcessToken1) silo1.deposit(inventory1 - lastMintedAmount1);
+        if (hasExcessToken0) silo0.deposit(balance0 - lastMintedAmount0);
+        if (hasExcessToken1) silo1.deposit(balance1 - lastMintedAmount1);
 
         emit Rebalance(_combine.lower, _combine.upper, cache.magic, inventory0, inventory1);
     }

@@ -1,6 +1,3 @@
-import fs from "fs";
-import path from "path";
-
 require("dotenv-safe").config();
 
 require("@nomiclabs/hardhat-truffle5");
@@ -29,7 +26,7 @@ module.exports = {
     hardhat: {
       forking: {
         url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
-        blockNumber: 12811574,//12802299,
+        blockNumber: 12802299,
       },
       accounts: [
         {
@@ -38,11 +35,7 @@ module.exports = {
           balance: "2000000000000000000",
         },
         {
-          privateKey: process.env.OTHER_DEPLOYER,
-          balance: "2000000000000000000",
-        },
-        {
-          privateKey: process.env.ALOE_DEPLOYER,
+          privateKey: process.env.DEPLOYER,
           balance: "2000000000000000000",
         },
       ],
@@ -50,7 +43,7 @@ module.exports = {
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
       timeout: 720000,
-      accounts: [process.env.OTHER_DEPLOYER, process.env.ALOE_DEPLOYER],
+      accounts: [process.env.DEPLOYER],
       gasPrice: 20000000000,
       gasMultiplier: 1.15,
     },

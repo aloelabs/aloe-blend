@@ -4,8 +4,11 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "../libraries/FullMath.sol";
+
 import "./compound/CERC20.sol";
 import "./compound/CEther.sol";
+import "./compound/Comptroller.sol";
 import "./WETH.sol";
 
 library Compound {
@@ -19,12 +22,12 @@ library Compound {
     }
 
     function initialize(Market storage market, address cToken) internal {
-        try CERC20Storage(cToken).underlying() returns (address uToken) {
-            market.cToken = cToken;
-            market.uToken = uToken;
-        } catch {
+        if (cToken == address(CETH)) {
             market.cToken = cToken;
             delete market.uToken;
+        } else {
+            market.cToken = cToken;
+            market.uToken = CERC20Storage(cToken).underlying();
         }
     }
 
@@ -33,6 +36,7 @@ library Compound {
     }
 
     function deposit(Market memory market, uint256 amount) internal {
+        if (amount == 0) return;
         if (market.cToken == address(CETH)) {
             WETH.withdraw(amount);
             CETH.mint{value: amount}();
@@ -43,17 +47,20 @@ library Compound {
     }
 
     function withdraw(Market memory market, uint256 amount) internal {
+        if (amount == 0) return;
+        uint256 cAmount = 1 + FullMath.mulDiv(amount, 1e18, CERC20(market.cToken).exchangeRateStored());
+
         if (market.cToken == address(CETH)) {
-            require(CETH.redeemUnderlying(amount) == 0, "Compound: redeem failed");
+            require(CETH.redeem(cAmount) == 0, "Compound: redeem ETH failed");
             WETH.deposit{value: amount}();
         } else {
-            require(CERC20(market.cToken).redeemUnderlying(amount) == 0, "Compound: redeem failed");
+            require(CERC20(market.cToken).redeem(cAmount) == 0, "Compound: redeem failed");
         }
     }
 
     function getBalance(Market memory market) internal view returns (uint256 balance) {
         CERC20 cToken = CERC20(market.cToken);
-        return cToken.balanceOf(address(this)) * cToken.exchangeRateStored();
+        return FullMath.mulDiv(cToken.balanceOf(address(this)), cToken.exchangeRateStored(), 1e18);
     }
 
     function _approve(

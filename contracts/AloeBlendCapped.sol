@@ -10,7 +10,7 @@ contract AloeBlendCapped is AloeBlend {
     using SafeERC20 for IERC20;
 
     address public immutable MULTISIG;
-    uint256 public maxTotalSupply = 100000000000000000000;
+    uint256 public maxTotalSupply = 0;
 
     constructor(
         IUniswapV3Pool uniPool,
@@ -42,7 +42,7 @@ contract AloeBlendCapped is AloeBlend {
         )
     {
         (shares, amount0, amount1) = super.deposit(amount0Max, amount1Max, amount0Min, amount1Min);
-        require(totalSupply() <= maxTotalSupply, "Aloe: Pool already full");
+        require(totalSupply() <= maxTotalSupply, "Aloe: Vault already full");
     }
 
     /**

@@ -10,6 +10,12 @@
         "bracketSpacing": false,
         "explicitTypes": "always"
       }
+    },
+    {
+      "files": "*.js",
+      "options": {
+        "printWidth": 120
+      }
     }
   ]
 }
