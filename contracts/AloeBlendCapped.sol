@@ -10,7 +10,7 @@ contract AloeBlendCapped is AloeBlend {
     using SafeERC20 for IERC20;
 
     address public immutable MULTISIG;
-    uint256 public maxTotalSupply = 0;
+    uint256 public maxTotalSupply = 100000000000000000000;
 
     constructor(
         IUniswapV3Pool uniPool,
@@ -69,5 +69,9 @@ contract AloeBlendCapped is AloeBlend {
 
     function setK(uint8 _K) external restricted {
         K = _K;
+    }
+
+    function setMaintenanceFee(uint256 _maintenanceFee) external restricted {
+        maintenanceFee = _maintenanceFee;
     }
 }
