@@ -8,7 +8,6 @@ import "../libraries/FullMath.sol";
 
 import "./compound/CERC20.sol";
 import "./compound/CEther.sol";
-import "./compound/Comptroller.sol";
 import "./WETH.sol";
 
 library Compound {

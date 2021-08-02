@@ -45,6 +45,7 @@ interface IAloeBlendActions {
 
     /**
      * @notice Rebalances vault to maintain 50/50 inventory ratio
+     * @param rewardMode Whether to denominate caller's reward in token0 (0), token1 (1), or both (2)
      */
-    function rebalance() external;
+    function rebalance(uint8 rewardMode) external;
 }

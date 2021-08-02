@@ -54,8 +54,12 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     using Uniswap for Uniswap.Position;
     using Compound for Compound.Market;
 
+    uint16 public constant DIVISOR_OF_REBALANCE_REWARD = 4;
+
+    uint24 public constant DIVISOR_OF_SHRINK_URGENCY = 2;
+
     /// @inheritdoc IAloeBlendImmutables
-    int24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
+    uint24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
     /// @inheritdoc IAloeBlendState
     uint8 public override K = 20;
@@ -68,6 +72,12 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
 
     /// @inheritdoc IAloeBlendState
     Compound.Market public override silo1;
+
+    uint256 public maintenanceFee; // in basis points, 5000 would be 5_000/10_000 = 50%
+
+    uint256 public maintenanceBudget0;
+
+    uint256 public maintenanceBudget1;
 
     /// @dev For reentrancy check
     bool private locked;
@@ -101,15 +111,23 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         // Everything in Compound
         inventory0 += silo0.getBalance();
         inventory1 += silo1.getBalance();
-        // Everything in the contract
-        inventory0 += TOKEN0.balanceOf(address(this));
-        inventory1 += TOKEN1.balanceOf(address(this));
+        // Everything in the contract, except maintenance budget
+        inventory0 += _balance0();
+        inventory1 += _balance1();
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getNextPositionWidth() public view override returns (int24 width) {
-        (uint176 mean, uint176 sigma) = fetchPriceStatistics();
-        width = TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, K * sigma, mean)));
+    function getRebalanceUrgency() public view override returns (uint16 urgency) {
+        (uint24 width, int24 tickTWAP) = getNextPositionWidth();
+        urgency = _computeRebalanceUrgency(combine, width, tickTWAP);
+    }
+
+    /// @inheritdoc IAloeBlendDerivedState
+    function getNextPositionWidth() public view override returns (uint24 width, int24 tickTWAP) {
+        uint176 mean;
+        uint176 sigma;
+        (mean, sigma, tickTWAP) = fetchPriceStatistics();
+        width = uint24(TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, K * sigma, mean))));
         if (width < MIN_WIDTH) width = MIN_WIDTH;
     }
 
@@ -163,11 +181,11 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
 
         // Portion from contract
         // NOTE: Must be done FIRST to ensure we don't double count things after exiting Uniswap/Compound
-        amount0 = FullMath.mulDiv(TOKEN0.balanceOf(address(this)), shares, totalSupply);
-        amount1 = FullMath.mulDiv(TOKEN1.balanceOf(address(this)), shares, totalSupply);
+        amount0 = FullMath.mulDiv(_balance0(), shares, totalSupply);
+        amount1 = FullMath.mulDiv(_balance1(), shares, totalSupply);
 
         // Portion from Uniswap
-        (temp0, temp1) = combine.withdrawFraction(shares, totalSupply);
+        (temp0, temp1) = _withdrawFractionFromCombine(shares, totalSupply);
         amount0 += temp0;
         amount1 += temp1;
 
@@ -196,26 +214,31 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint160 sqrtPriceX96;
         uint96 magic;
         int24 tick;
-        int24 w;
+        int24 tickTWAP;
+        uint24 w;
+        uint16 urgency;
         uint224 priceX96;
     }
 
     /// @inheritdoc IAloeBlendActions
-    function rebalance() external override lock {
+    function rebalance(uint8 rewardMode) external override lock {
         Uniswap.Position memory _combine = combine;
         RebalanceCache memory cache;
 
         // Get current tick & price
         (cache.sqrtPriceX96, cache.tick, , , , , ) = _combine.pool.slot0();
         cache.priceX96 = uint224(FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, TWO_96));
-        // Get new position width & inventory usage fraction
-        cache.w = getNextPositionWidth() >> 1;
-        cache.magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-cache.w));
+        // Get new position width, urgency, and inventory usage fraction
+        (cache.w, cache.tickTWAP) = getNextPositionWidth();
+        cache.urgency = _computeRebalanceUrgency(_combine, cache.w, cache.tickTWAP);
+        cache.w = cache.w >> 1;
+        cache.magic = uint96(TWO_96 - TickMath.getSqrtRatioAtTick(-int24(cache.w)));
 
         // Exit current Uniswap position
         {
             (uint128 liquidity, , , , ) = _combine.info();
-            _combine.withdraw(liquidity);
+            (, , uint256 earned0, uint256 earned1) = _combine.withdraw(liquidity);
+            _earmarkSomeForMaintenance(earned0, earned1);
         }
 
         // Compute amounts that should be placed in Uniswap position
@@ -230,8 +253,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             amount1 = FullMath.mulDiv(amount0, cache.priceX96, TWO_96);
         }
 
-        uint256 balance0 = TOKEN0.balanceOf(address(this));
-        uint256 balance1 = TOKEN1.balanceOf(address(this));
+        uint256 balance0 = _balance0();
+        uint256 balance1 = _balance1();
         bool hasExcessToken0 = balance0 > amount0;
         bool hasExcessToken1 = balance1 > amount1;
 
@@ -241,8 +264,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         if (!hasExcessToken1) silo1.withdraw(amount1 - balance1);
 
         // Update combine's ticks
-        _combine.lower = cache.tick - cache.w;
-        _combine.upper = cache.tick + cache.w;
+        _combine.lower = cache.tick - int24(cache.w);
+        _combine.upper = cache.tick + int24(cache.w);
         _combine = _coerceTicksToSpacing(_combine);
         combine.lower = _combine.lower;
         combine.upper = _combine.upper;
@@ -256,12 +279,36 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         if (hasExcessToken0) silo0.deposit(balance0 - lastMintedAmount0);
         if (hasExcessToken1) silo1.deposit(balance1 - lastMintedAmount1);
 
-        emit Rebalance(_combine.lower, _combine.upper, cache.magic, inventory0, inventory1);
+        // Reward caller
+        {
+            if (rewardMode % 2 == 0) {
+                amount0 = FullMath.mulDiv(maintenanceBudget0, cache.urgency, 10_000 * DIVISOR_OF_REBALANCE_REWARD);
+                TOKEN0.safeTransfer(msg.sender, amount0);
+                maintenanceBudget0 -= amount0;
+            }
+            if (rewardMode != 0) {
+                amount1 = FullMath.mulDiv(maintenanceBudget1, cache.urgency, 10_000 * DIVISOR_OF_REBALANCE_REWARD);
+                TOKEN1.safeTransfer(msg.sender, amount1);
+                maintenanceBudget1 -= amount1;
+            }
+        }
+
+        emit Rebalance(_combine.lower, _combine.upper, cache.magic, cache.urgency, inventory0, inventory1);
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function fetchPriceStatistics() public view override returns (uint176 mean, uint176 sigma) {
+    function fetchPriceStatistics()
+        public
+        view
+        override
+        returns (
+            uint176 mean,
+            uint176 sigma,
+            int24 tickTWAP
+        )
+    {
         (int56[] memory tickCumulatives, ) = UNI_POOL.observe(selectedOracleTimetable());
+        tickTWAP = int24((tickCumulatives[9] - tickCumulatives[8]) / 360);
 
         // Compute mean price over the entire 54 minute period
         mean = TickMath.getSqrtRatioAtTick(int24((tickCumulatives[9] - tickCumulatives[0]) / 3240));
@@ -344,10 +391,77 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         }
     }
 
+    /// @dev Withdraws fraction of liquidity from combine, but collects *all* fees from it
+    function _withdrawFractionFromCombine(uint256 numerator, uint256 denominator)
+        private
+        returns (uint256 amount0, uint256 amount1)
+    {
+        assert(numerator < denominator);
+        Uniswap.Position memory _combine = combine;
+
+        (uint128 liquidity, , , , ) = _combine.info();
+        liquidity = uint128(FullMath.mulDiv(liquidity, numerator, denominator));
+
+        uint256 earned0;
+        uint256 earned1;
+        (amount0, amount1, earned0, earned1) = _combine.withdraw(liquidity);
+        (earned0, earned1) = _earmarkSomeForMaintenance(earned0, earned1);
+
+        // Add share of earned fees
+        amount0 += FullMath.mulDiv(earned0, numerator, denominator);
+        amount1 += FullMath.mulDiv(earned1, numerator, denominator);
+    }
+
+    /// @dev Earmark some earned fees for maintenance, according to `maintenanceFee`. Return what's leftover
+    function _earmarkSomeForMaintenance(uint256 earned0, uint256 earned1) private returns (uint256, uint256) {
+        uint256 _maintenanceFee = maintenanceFee;
+        if (_maintenanceFee != 0) {
+            uint256 toMaintenance;
+            // Accrue token0
+            toMaintenance = FullMath.mulDiv(earned0, _maintenanceFee, 10_000);
+            earned0 -= toMaintenance;
+            maintenanceBudget0 += toMaintenance;
+            // Accrue token1
+            toMaintenance = FullMath.mulDiv(earned1, _maintenanceFee, 10_000);
+            earned1 -= toMaintenance;
+            maintenanceBudget1 += toMaintenance;
+        }
+        return (earned0, earned1);
+    }
+
+    function _computeRebalanceUrgency(
+        Uniswap.Position memory current,
+        uint24 newW,
+        int24 tickTWAP
+    ) private pure returns (uint16) {
+        unchecked {
+            int48 diff = (current.lower + current.upper) / 2 - tickTWAP;
+            uint24 w = uint24(current.upper - current.lower);
+            if (w == 0) return 0;
+
+            uint48 urgency = (40_000 * uint48(diff**2)) / uint48(w)**2;
+            if (urgency > 10_000) {
+                urgency = 10_000;
+            } else if (newW < w) {
+                uint24 shrinkUrgency = (10_000 - (10_000 * newW) / w) / DIVISOR_OF_SHRINK_URGENCY;
+                urgency = urgency + shrinkUrgency - ((urgency * uint48(shrinkUrgency)) / 10_000);
+            }
+            return uint16(urgency);
+        }
+    }
+
     function _coerceTicksToSpacing(Uniswap.Position memory p) private view returns (Uniswap.Position memory) {
         int24 tickSpacing = TICK_SPACING;
         p.lower = p.lower - (p.lower < 0 ? tickSpacing + (p.lower % tickSpacing) : p.lower % tickSpacing);
         p.upper = p.upper + (p.upper < 0 ? -p.upper % tickSpacing : tickSpacing - (p.upper % tickSpacing));
         return p;
+    }
+
+    function _balance0() private view returns (uint256) {
+        return TOKEN0.balanceOf(address(this)) - maintenanceBudget0;
+    }
+
+    function _balance1() private view returns (uint256) {
+        return TOKEN1.balanceOf(address(this)) - maintenanceBudget1;
     }
 }

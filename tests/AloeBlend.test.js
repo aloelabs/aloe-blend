@@ -136,10 +136,10 @@ describe("Aloe Blend Contract Test @hardhat", () => {
   });
 
   it("should rebalance", async () => {
-    const width = (await aloeBlend.getNextPositionWidth()).toNumber();
+    const width = (await aloeBlend.getNextPositionWidth()).width.toNumber();
     expect(width).to.equal(1000);
 
-    const tx0 = await aloeBlend.rebalance();
+    const tx0 = await aloeBlend.rebalance(2);
     console.log(`Rebalance gas: ${tx0.receipt.gasUsed}`);
 
     const rebalanceEvent = tx0.logs[tx0.logs.length - 1];
@@ -160,32 +160,28 @@ describe("Aloe Blend Contract Test @hardhat", () => {
   });
 
   it("should rebalance again", async () => {
-    const width = (await aloeBlend.getNextPositionWidth()).toNumber();
+    const width = (await aloeBlend.getNextPositionWidth()).width.toNumber();
     expect(width).to.equal(1000);
 
-    const tx0 = await aloeBlend.rebalance();
+    const tx0 = await aloeBlend.rebalance(2);
     console.log(`Rebalance gas: ${tx0.receipt.gasUsed}`);
 
     const rebalanceEvent = tx0.logs[tx0.logs.length - 1];
     expect(rebalanceEvent.event).to.equal("Rebalance");
 
-    const lower = rebalanceEvent.args.lower.toNumber();
-    const upper = rebalanceEvent.args.upper.toNumber();
-    const tickSpacing = (await aloeBlend.TICK_SPACING()).toNumber();
-    expect(upper - lower).to.be.greaterThanOrEqual(width);
-    expect(upper - lower).to.be.lessThanOrEqual(width + 2 * tickSpacing);
-
     const magic = rebalanceEvent.args.magic.toString(10);
     expect(magic).to.equal("1956053718673968237170145039");
   });
 
-  //   it("should withdraw", async () => {
-  //     const tx0 = await pool.withdraw("100000000000000000", 0, 0, { from: WHALE });
-  //     const withdraw = tx0.logs[5];
-  //     expect(withdraw.event).to.equal('Withdraw');
-  //     expect(withdraw.args.shares.toString(10)).to.equal("100000000000000000");
-  //     expect(withdraw.args.amount0.toString(10)).to.equal("199999996");
-  //     expect(withdraw.args.amount1.toString(10)).to.equal("99999999999978213");
-  //     console.log(`Gas used for snipe: ${tx0.receipt.gasUsed}`);
-  //   })
+  it("should withdraw", async () => {
+    const tx0 = await aloeBlend.withdraw("100000000000000000", 0, 0, { from: WHALE });
+    const withdraw = tx0.logs[tx0.logs.length - 1];
+    expect(withdraw.event).to.equal("Withdraw");
+    expect(withdraw.args.shares.toString(10)).to.equal("100000000000000000");
+    expect(withdraw.args.amount0.toString(10)).to.equal("199999999");
+    expect(withdraw.args.amount1.toString(10)).to.equal("99999999856462065");
+
+    console.log((await token0.balanceOf(aloeBlend.address)).toString(10));
+    console.log((await token1.balanceOf(aloeBlend.address)).toString(10));
+  });
 });

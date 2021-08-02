@@ -63,26 +63,6 @@ library Uniswap {
         earned1 = collected1 - burned1;
     }
 
-    /// @dev Withdraws fraction of liquidity, but still collects *all* fees
-    function withdrawFraction(
-        Position memory position,
-        uint256 numerator,
-        uint256 denominator
-    ) internal returns (uint256 amount0, uint256 amount1) {
-        assert(numerator < denominator);
-
-        (uint128 liquidity, , , , ) = info(position);
-        liquidity = uint128(FullMath.mulDiv(liquidity, numerator, denominator));
-
-        uint256 earned0;
-        uint256 earned1;
-        (amount0, amount1, earned0, earned1) = withdraw(position, liquidity);
-
-        // Add share of fees
-        amount0 += FullMath.mulDiv(earned0, numerator, denominator);
-        amount1 += FullMath.mulDiv(earned1, numerator, denominator);
-    }
-
     /**
      * @notice Amounts of TOKEN0 and TOKEN1 held in vault's position. Includes
      * owed fees, except those accrued since last poke.
