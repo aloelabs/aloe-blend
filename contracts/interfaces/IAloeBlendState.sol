@@ -8,6 +8,15 @@ interface IAloeBlendState {
     /// @dev The number of standard deviations to +/- from mean when setting Uniswap position
     function K() external view returns (uint8);
 
+    /// @dev The portion of swap fees (in basis points) that goes toward maintenance
+    function maintenanceFee() external view returns (uint256);
+
+    /// @dev The size of the budget available for things like `rebalance()` rewards (token0)
+    function maintenanceBudget0() external view returns (uint256);
+
+    /// @dev The size of the budget available for things like `rebalance()` rewards (token1)
+    function maintenanceBudget1() external view returns (uint256);
+
     /// @dev The Uniswap position harvesting fees in the combined token0-token1 pool
     function combine()
         external

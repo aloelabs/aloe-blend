@@ -54,15 +54,26 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     using Uniswap for Uniswap.Position;
     using Compound for Compound.Market;
 
-    uint16 public constant DIVISOR_OF_REBALANCE_REWARD = 4;
+    /// @inheritdoc IAloeBlendImmutables
+    uint8 public constant override DIVISOR_OF_REBALANCE_REWARD = 4;
 
-    uint24 public constant DIVISOR_OF_SHRINK_URGENCY = 2;
+    /// @inheritdoc IAloeBlendImmutables
+    uint8 public constant override DIVISOR_OF_SHRINK_URGENCY = 2;
 
     /// @inheritdoc IAloeBlendImmutables
     uint24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
     /// @inheritdoc IAloeBlendState
     uint8 public override K = 20;
+
+    /// @inheritdoc IAloeBlendState
+    uint256 public override maintenanceFee = 2500; // 2500 --> 25% of swap fees
+
+    /// @inheritdoc IAloeBlendState
+    uint256 public override maintenanceBudget0;
+
+    /// @inheritdoc IAloeBlendState
+    uint256 public override maintenanceBudget1;
 
     /// @inheritdoc IAloeBlendState
     Uniswap.Position public override combine;
@@ -72,12 +83,6 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
 
     /// @inheritdoc IAloeBlendState
     Compound.Market public override silo1;
-
-    uint256 public maintenanceFee; // in basis points, 5000 would be 5_000/10_000 = 50%
-
-    uint256 public maintenanceBudget0;
-
-    uint256 public maintenanceBudget1;
 
     /// @dev For reentrancy check
     bool private locked;
@@ -127,7 +132,9 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint176 mean;
         uint176 sigma;
         (mean, sigma, tickTWAP) = fetchPriceStatistics();
-        width = uint24(TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, K * sigma, mean))));
+        width = uint24(
+            TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, uint176(K) * sigma, mean)))
+        );
         if (width < MIN_WIDTH) width = MIN_WIDTH;
     }
 
@@ -267,13 +274,13 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         _combine.lower = cache.tick - int24(cache.w);
         _combine.upper = cache.tick + int24(cache.w);
         _combine = _coerceTicksToSpacing(_combine);
-        combine.lower = _combine.lower;
-        combine.upper = _combine.upper;
 
         // Place some liquidity in Uniswap
         delete lastMintedAmount0;
         delete lastMintedAmount1;
         _combine.deposit(_combine.liquidityForAmounts(cache.sqrtPriceX96, amount0, amount1));
+        combine.lower = _combine.lower;
+        combine.upper = _combine.upper;
 
         // Place excess into Compound
         if (hasExcessToken0) silo0.deposit(balance0 - lastMintedAmount0);
@@ -281,13 +288,14 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
 
         // Reward caller
         {
+            uint256 _divisor = 10_000 * uint256(DIVISOR_OF_REBALANCE_REWARD);
             if (rewardMode % 2 == 0) {
-                amount0 = FullMath.mulDiv(maintenanceBudget0, cache.urgency, 10_000 * DIVISOR_OF_REBALANCE_REWARD);
+                amount0 = FullMath.mulDiv(maintenanceBudget0, cache.urgency, _divisor);
                 TOKEN0.safeTransfer(msg.sender, amount0);
                 maintenanceBudget0 -= amount0;
             }
             if (rewardMode != 0) {
-                amount1 = FullMath.mulDiv(maintenanceBudget1, cache.urgency, 10_000 * DIVISOR_OF_REBALANCE_REWARD);
+                amount1 = FullMath.mulDiv(maintenanceBudget1, cache.urgency, _divisor);
                 TOKEN1.safeTransfer(msg.sender, amount1);
                 maintenanceBudget1 -= amount1;
             }
@@ -443,7 +451,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             if (urgency > 10_000) {
                 urgency = 10_000;
             } else if (newW < w) {
-                uint24 shrinkUrgency = (10_000 - (10_000 * newW) / w) / DIVISOR_OF_SHRINK_URGENCY;
+                uint24 shrinkUrgency = (10_000 - (10_000 * newW) / w) / uint24(DIVISOR_OF_SHRINK_URGENCY);
                 urgency = urgency + shrinkUrgency - ((urgency * uint48(shrinkUrgency)) / 10_000);
             }
             return uint16(urgency);
