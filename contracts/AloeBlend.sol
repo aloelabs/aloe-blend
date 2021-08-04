@@ -209,8 +209,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         require(amount1 >= amount1Min, "Aloe: amount1 too low");
 
         // Transfer tokens
-        if (amount0 != 0) TOKEN0.safeTransfer(msg.sender, amount0);
-        if (amount1 != 0) TOKEN1.safeTransfer(msg.sender, amount1);
+        TOKEN0.safeTransfer(msg.sender, amount0);
+        TOKEN1.safeTransfer(msg.sender, amount1);
 
         // Burn shares
         _burn(msg.sender, shares);
@@ -375,10 +375,19 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         assert(totalSupply == 0 || inventory0 != 0 || inventory1 != 0);
 
         if (totalSupply == 0) {
-            // For first deposit, just use the amounts desired
-            amount0 = amount0Max;
-            amount1 = amount1Max;
-            shares = amount0 > amount1 ? amount0 : amount1; // max
+            // For first deposit, enforce 50/50 ratio
+            (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
+            uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, TWO_96));
+            amount0 = FullMath.mulDiv(amount1Max, TWO_96, priceX96);
+
+            if (amount0 < amount0Max) {
+                amount1 = amount1Max;
+                shares = amount1;
+            } else {
+                amount0 = amount0Max;
+                amount1 = FullMath.mulDiv(amount0, priceX96, TWO_96);
+                shares = amount0;
+            }
         } else if (inventory0 == 0) {
             amount1 = amount1Max;
             shares = FullMath.mulDiv(amount1, totalSupply, inventory1);

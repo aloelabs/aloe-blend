@@ -112,21 +112,21 @@ describe("Aloe Blend Contract Test @hardhat", () => {
     const deposit = tx0.logs[3];
     expect(deposit.event).to.equal("Deposit");
     expect(deposit.args.sender).to.equal(WHALE);
-    expect(deposit.args.shares.toString(10)).to.equal("50000000000000000");
+    expect(deposit.args.shares.toString(10)).to.equal("100000000");
     expect(deposit.args.amount0.toString(10)).to.equal("100000000");
-    expect(deposit.args.amount1.toString(10)).to.equal("50000000000000000");
+    expect(deposit.args.amount1.toString(10)).to.equal("47451794160948057");
   });
 
   it("should deposit proportionally", async () => {
-    const tx0 = await aloeBlend.deposit("100000000", "55555555555555555", 0, 0, {
+    const tx0 = await aloeBlend.deposit("100000000", "40000000000000000", 0, 0, {
       from: WHALE,
     });
     const deposit = tx0.logs[3];
     expect(deposit.event).to.equal("Deposit");
     expect(deposit.args.sender).to.equal(WHALE);
-    expect(deposit.args.shares.toString(10)).to.equal("50000000000000000");
-    expect(deposit.args.amount0.toString(10)).to.equal("100000000");
-    expect(deposit.args.amount1.toString(10)).to.equal("50000000000000000");
+    expect(deposit.args.shares.toString(10)).to.equal("84296075");
+    expect(deposit.args.amount0.toString(10)).to.equal("84296075");
+    expect(deposit.args.amount1.toString(10)).to.equal("40000000000000000");
   });
 
   it("should fetch price statistics", async () => {
@@ -174,12 +174,12 @@ describe("Aloe Blend Contract Test @hardhat", () => {
   });
 
   it("should withdraw", async () => {
-    const tx0 = await aloeBlend.withdraw("100000000000000000", 0, 0, { from: WHALE });
+    const tx0 = await aloeBlend.withdraw("184296075", 0, 0, { from: WHALE });
     const withdraw = tx0.logs[tx0.logs.length - 1];
     expect(withdraw.event).to.equal("Withdraw");
-    expect(withdraw.args.shares.toString(10)).to.equal("100000000000000000");
-    expect(withdraw.args.amount0.toString(10)).to.equal("199999999");
-    expect(withdraw.args.amount1.toString(10)).to.equal("99999999856462065");
+    expect(withdraw.args.shares.toString(10)).to.equal("184296075");
+    expect(withdraw.args.amount0.toString(10)).to.equal("184296073");
+    expect(withdraw.args.amount1.toString(10)).to.equal("87451793417527197");
 
     console.log((await token0.balanceOf(aloeBlend.address)).toString(10));
     console.log((await token1.balanceOf(aloeBlend.address)).toString(10));

@@ -53,7 +53,10 @@ contract AloeBlendCapped is AloeBlend {
         uint256 amount,
         address to
     ) external restricted {
-        require(token != TOKEN0 && token != TOKEN1, "Not sweepable");
+        require(
+            token != TOKEN0 && token != TOKEN1 && address(token) != silo0.cToken && address(token) != silo1.cToken,
+            "Not sweepable"
+        );
         token.safeTransfer(to, amount);
     }
 
