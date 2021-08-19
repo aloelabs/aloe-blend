@@ -14,10 +14,10 @@ contract AloeBlendCapped is AloeBlend {
 
     constructor(
         IUniswapV3Pool uniPool,
-        address cToken0,
-        address cToken1,
+        ISilo silo0,
+        ISilo silo1,
         address multisig
-    ) AloeBlend(uniPool, cToken0, cToken1) {
+    ) AloeBlend(uniPool, silo0, silo1) {
         MULTISIG = multisig;
     }
 
@@ -54,7 +54,10 @@ contract AloeBlendCapped is AloeBlend {
         address to
     ) external restricted {
         require(
-            token != TOKEN0 && token != TOKEN1 && address(token) != silo0.cToken && address(token) != silo1.cToken,
+            token != TOKEN0 &&
+            token != TOKEN1 &&
+            silo0.shouldAllowEmergencySweepOf(address(token)) &&
+            silo1.shouldAllowEmergencySweepOf(address(token)),
             "Not sweepable"
         );
         token.safeTransfer(to, amount);

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../external/Compound.sol";
 import "../external/Uniswap.sol";
+
+import "./ISilo.sol";
 
 interface IAloeBlendState {
     /// @dev The number of standard deviations to +/- from mean when setting Uniswap position
@@ -18,7 +19,7 @@ interface IAloeBlendState {
     function maintenanceBudget1() external view returns (uint256);
 
     /// @dev The Uniswap position harvesting fees in the combined token0-token1 pool
-    function combine()
+    function uniswap()
         external
         view
         returns (
@@ -27,9 +28,9 @@ interface IAloeBlendState {
             int24 upper
         );
 
-    /// @dev The Compound market where excess token0 is stored
-    function silo0() external view returns (address cToken, address uToken);
+    /// @dev The silo where excess token0 is stored
+    function silo0() external view returns (ISilo silo);
 
-    /// @dev The Compound market where excess token1 is stored
-    function silo1() external view returns (address cToken, address uToken);
+    /// @dev The silo where excess token1 is stored
+    function silo1() external view returns (ISilo silo);
 }

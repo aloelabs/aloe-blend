@@ -3,6 +3,8 @@ const chaiAsPromised = require("chai-as-promised");
 const { artifacts } = require("hardhat");
 
 const AloeBlend = artifacts.require("AloeBlendCapped");
+const CompoundCEtherSilo = artifacts.require("CompoundCEtherSilo");
+const CompoundCTokenSilo = artifacts.require("CompoundCTokenSilo");
 const ERC20 = artifacts.require("ERC20");
 
 chai.use(chaiAsPromised);
@@ -54,7 +56,14 @@ describe("Aloe Blend Contract Test @hardhat", () => {
 
     const deployer = web3.eth.accounts.privateKeyToAccount(process.env.DEPLOYER);
 
-    aloeBlend = await AloeBlend.new(ADDRESS_UNI_POOL, ADDRESS_CTOKEN0, ADDRESS_CTOKEN1, multisig, {
+    silo0 = await CompoundCTokenSilo.new(ADDRESS_CTOKEN0, {
+      from: deployer.address,
+    });
+    silo1 = await CompoundCEtherSilo.new(ADDRESS_CTOKEN1, {
+      from: deployer.address,
+    });
+
+    aloeBlend = await AloeBlend.new(ADDRESS_UNI_POOL, silo0.address, silo1.address, multisig, {
       from: deployer.address,
     });
     token0 = await ERC20.at(await aloeBlend.TOKEN0());
