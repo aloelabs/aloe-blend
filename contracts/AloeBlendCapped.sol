@@ -10,7 +10,8 @@ contract AloeBlendCapped is AloeBlend {
     using SafeERC20 for IERC20;
 
     address public immutable MULTISIG;
-    uint256 public maxTotalSupply = 100000000000000000000;
+    uint256 public maxTotalSupply = 0;
+    uint24 public governedWidth = 0;
 
     constructor(
         IUniswapV3Pool uniPool,
@@ -24,6 +25,11 @@ contract AloeBlendCapped is AloeBlend {
     modifier restricted() {
         require(msg.sender == MULTISIG, "Not authorized");
         _;
+    }
+
+    function getNextPositionWidth() public view override returns (uint24 width, int24 tickTWAP) {
+        (width, tickTWAP) = super.getNextPositionWidth();
+        if (governedWidth > width) width = governedWidth;
     }
 
     function deposit(
@@ -42,7 +48,7 @@ contract AloeBlendCapped is AloeBlend {
         )
     {
         (shares, amount0, amount1) = super.deposit(amount0Max, amount1Max, amount0Min, amount1Min);
-        require(totalSupply() <= maxTotalSupply, "Aloe: Vault already full");
+        require(totalSupply() <= maxTotalSupply, "Aloe: Vault filled up");
     }
 
     /**
@@ -71,6 +77,10 @@ contract AloeBlendCapped is AloeBlend {
      */
     function setMaxTotalSupply(uint256 _maxTotalSupply) external restricted {
         maxTotalSupply = _maxTotalSupply;
+    }
+
+    function setGovernedWidth(uint24 _governedWidth) external restricted {
+        governedWidth = _governedWidth;
     }
 
     function setK(uint8 _K) external restricted {

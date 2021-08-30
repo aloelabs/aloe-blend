@@ -20,15 +20,15 @@ interface IAloeBlendDerivedState {
     /**
      * @notice Calculates what the Uniswap position's width *should* be based on current volatility
      * @return width The width as a number of ticks
-     * @return tickTWAP The geometric mean tick spanning 9 minutes ago -> 3 minutes ago
+     * @return tickTWAP The geometric mean tick spanning 6 minutes ago -> now
      */
     function getNextPositionWidth() external view returns (uint24 width, int24 tickTWAP);
 
     /**
-     * @notice Fetches Uniswap prices over 10 discrete intervals in the past hour, then computes statistics
-     * @return mean The mean of the samples
-     * @return sigma The standard deviation of the samples
-     * @return tickTWAP The geometric mean tick spanning 9 minutes ago -> 3 minutes ago
+     * @notice Fetches Uniswap prices over a number of discrete intervals, then computes statistics
+     * @return mean The mean of the samples, or 0 if oracle isn't sufficiently initialized
+     * @return sigma The standard deviation of the samples, or 0 if oracle isn't sufficiently initialized
+     * @return tickTWAP The geometric mean tick spanning 6 minutes ago -> now
      */
     function fetchPriceStatistics() external view returns (uint176 mean, uint176 sigma, int24 tickTWAP);
 

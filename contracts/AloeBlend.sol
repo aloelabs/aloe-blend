@@ -62,7 +62,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     uint8 public constant override DIVISOR_OF_SHRINK_URGENCY = 2;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant override MIN_WIDTH = 2000; // 2000 --> 4.9% of total inventory
+    uint24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
     /// @inheritdoc IAloeBlendState
     uint8 public override K = 20;
@@ -127,13 +127,16 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getNextPositionWidth() public view override returns (uint24 width, int24 tickTWAP) {
+    function getNextPositionWidth() public virtual view override returns (uint24 width, int24 tickTWAP) {
         uint176 mean;
         uint176 sigma;
         (mean, sigma, tickTWAP) = fetchPriceStatistics();
-        width = uint24(
-            TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, uint176(K) * sigma, mean)))
-        );
+
+        if (mean != 0) {
+            width = uint24(
+                TickMath.getTickAtSqrtRatio(uint160(TWO_96 + FullMath.mulDiv(TWO_96, uint176(K) * sigma, mean)))
+            );
+        }
         if (width < MIN_WIDTH) width = MIN_WIDTH;
     }
 
@@ -329,8 +332,21 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             int24 tickTWAP
         )
     {
-        (int56[] memory tickCumulatives, ) = UNI_POOL.observe(selectedOracleTimetable());
-        tickTWAP = int24((tickCumulatives[9] - tickCumulatives[8]) / 720);
+        int56[] memory tickCumulatives;
+
+        // Contract is neutered without more oracle data, but can still function
+        (, , , bool hasSufficientData) = uniswap.pool.observations(720);
+        if (!hasSufficientData) {
+            uint32[] memory secondsAgos = new uint32[](2);
+            secondsAgos[0] = 360;
+            secondsAgos[1] = 0;
+
+            (tickCumulatives, ) = UNI_POOL.observe(secondsAgos);
+            return (0, 0, int24((tickCumulatives[1] - tickCumulatives[0]) / 360));
+        }
+
+        (tickCumulatives, ) = UNI_POOL.observe(selectedOracleTimetable());
+        tickTWAP = int24((tickCumulatives[10] - tickCumulatives[9]) / 360);
 
         // Compute mean price over the entire 108 minute period
         mean = TickMath.getSqrtRatioAtTick(int24((tickCumulatives[9] - tickCumulatives[0]) / 6480));
@@ -357,7 +373,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
 
     /// @inheritdoc IAloeBlendDerivedState
     function selectedOracleTimetable() public pure override returns (uint32[] memory secondsAgos) {
-        secondsAgos = new uint32[](10);
+        secondsAgos = new uint32[](11);
         secondsAgos[0] = 6840;
         secondsAgos[1] = 6120;
         secondsAgos[2] = 5400;
@@ -368,6 +384,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         secondsAgos[7] = 1800;
         secondsAgos[8] = 1080;
         secondsAgos[9] = 360;
+        secondsAgos[10] = 0;
     }
 
     /// @dev Calculates the largest possible `amount0` and `amount1` such that
