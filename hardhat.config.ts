@@ -32,11 +32,11 @@ module.exports = {
         {
           privateKey:
             "0101010101010101010101010101010101010101010101010101010101010101",
-          balance: "2000000000000000000",
+          balance: "20000000000000000000",
         },
         {
           privateKey: process.env.DEPLOYER,
-          balance: "2000000000000000000",
+          balance: "20000000000000000000",
         },
       ],
     },
@@ -44,7 +44,7 @@ module.exports = {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
       timeout: 720000,
       accounts: [process.env.DEPLOYER],
-      gasPrice: 27000000000,
+      gasPrice: 60000000000,
       gasMultiplier: 1.15,
     },
     kovan: {

@@ -33,12 +33,25 @@ web3.eth.extend({
       call: "hardhat_stopImpersonatingAccount",
       params: 1,
     },
+    {
+      name: "reset",
+      call: "hardhat_reset",
+      params: 1,
+      /*
+      {
+        forking: {
+          jsonRpcUrl: "https://eth-mainnet.alchemyapi.io/v2/<key>",
+          blockNumber: 11095000,
+        },
+      }
+      */
+    },
   ],
 });
 
 const UINT256MAX = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
-describe("Aloe Blend Contract Test @hardhat", () => {
+describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
   const ADDRESS_UNI_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
   const ADDRESS_CTOKEN0 = "0x39AA39c021dfbaE8faC545936693aC917d5E7563";
   const ADDRESS_CTOKEN1 = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
@@ -49,6 +62,25 @@ describe("Aloe Blend Contract Test @hardhat", () => {
   let aloeBlend;
   let token0;
   let token1;
+
+  before(async () => {
+    await web3.eth.hardhat.reset({
+      forking: {
+        jsonRpcUrl: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
+        blockNumber: 12802299,
+      },
+      accounts: [
+        {
+          privateKey: "0101010101010101010101010101010101010101010101010101010101010101",
+          balance: "2000000000000000000",
+        },
+        {
+          privateKey: process.env.DEPLOYER,
+          balance: "2000000000000000000",
+        },
+      ],
+    });
+  });
 
   it("should deploy", async () => {
     accounts = await web3.eth.getAccounts();
@@ -102,7 +134,7 @@ describe("Aloe Blend Contract Test @hardhat", () => {
     });
     await expect(tx2).to.eventually.be.rejectedWith(
       Error,
-      "VM Exception while processing transaction: reverted with reason string 'Aloe: Vault already full'"
+      "VM Exception while processing transaction: reverted with reason string 'Aloe: Vault filled up'"
     );
   });
 
@@ -140,8 +172,8 @@ describe("Aloe Blend Contract Test @hardhat", () => {
 
   it("should fetch price statistics", async () => {
     const res = await aloeBlend.fetchPriceStatistics();
-    expect(res.mean.toString(10)).to.equal("133603816270619257695673");
-    expect(res.sigma.toString(10)).to.equal("128962633278655295030");
+    expect(res.mean.toString(10)).to.equal("0");
+    expect(res.sigma.toString(10)).to.equal("0");
   });
 
   it("should rebalance", async () => {
@@ -188,7 +220,7 @@ describe("Aloe Blend Contract Test @hardhat", () => {
     expect(withdraw.event).to.equal("Withdraw");
     expect(withdraw.args.shares.toString(10)).to.equal("184296075");
     expect(withdraw.args.amount0.toString(10)).to.equal("184296073");
-    expect(withdraw.args.amount1.toString(10)).to.equal("87451793417527197");
+    expect(withdraw.args.amount1.toString(10)).to.equal("87451793545064525");
 
     console.log((await token0.balanceOf(aloeBlend.address)).toString(10));
     console.log((await token1.balanceOf(aloeBlend.address)).toString(10));
