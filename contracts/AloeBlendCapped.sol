@@ -8,10 +8,23 @@ import "./AloeBlend.sol";
 
 contract AloeBlendCapped is AloeBlend {
     using SafeERC20 for IERC20;
+    using Silo for ISilo;
+
+    uint256 public constant TIMELOCK = 2 days;
 
     address public immutable MULTISIG;
+
     uint256 public maxTotalSupply = 0;
+
     uint24 public governedWidth = 0;
+
+    struct PendingSilos {
+        ISilo silo0;
+        ISilo silo1;
+        uint256 timestamp;
+    }
+
+    PendingSilos public pendingSilos;
 
     constructor(
         IUniswapV3Pool uniPool,
@@ -89,5 +102,21 @@ contract AloeBlendCapped is AloeBlend {
 
     function setMaintenanceFee(uint256 _maintenanceFee) external restricted {
         maintenanceFee = _maintenanceFee;
+    }
+
+    function setSilos(ISilo _silo0, ISilo _silo1) external restricted {
+        pendingSilos = PendingSilos(_silo0, _silo1, block.timestamp);
+    }
+
+    function switchToPendingSilos() external restricted {
+        require(block.timestamp > pendingSilos.timestamp + TIMELOCK, "TIMELOCK");
+
+        silo0.delegate_poke();
+        silo1.delegate_poke();
+        silo0.delegate_withdraw(silo0.balanceOf(address(this)));
+        silo1.delegate_withdraw(silo1.balanceOf(address(this)));
+
+        silo0 = pendingSilos.silo0;
+        silo1 = pendingSilos.silo1;
     }
 }
