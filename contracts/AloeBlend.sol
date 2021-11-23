@@ -178,14 +178,6 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         TOKEN0.safeTransferFrom(msg.sender, address(this), amount0);
         TOKEN1.safeTransferFrom(msg.sender, address(this), amount1);
 
-        // Put portion in Uniswap so that we don't deviate from 50/50 ratio in interim between
-        // deposit and next rebalance
-        if (_uniswap.lower != _uniswap.upper) {
-            uint24 halfWidth = uint24(_uniswap.upper - _uniswap.lower) >> 1;
-            (uint256 uni0, uint256 uni1, ) = _computeAmountsForUniswap(amount0, amount1, priceX96, halfWidth);
-            _uniswap.deposit(_uniswap.liquidityForAmounts(sqrtPriceX96, uni0, uni1));
-        }
-
         // Mint shares
         _mint(msg.sender, shares);
         emit Deposit(msg.sender, shares, amount0, amount1);
@@ -528,6 +520,10 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         int24 tickSpacing = TICK_SPACING;
         p.lower = p.lower - (p.lower < 0 ? tickSpacing + (p.lower % tickSpacing) : p.lower % tickSpacing);
         p.upper = p.upper + (p.upper < 0 ? -p.upper % tickSpacing : tickSpacing - (p.upper % tickSpacing));
+
+        if (p.lower < TickMath.MIN_TICK) p.lower = TickMath.MIN_TICK;
+        if (p.upper > TickMath.MAX_TICK) p.upper = TickMath.MAX_TICK;
+
         return p;
     }
 
