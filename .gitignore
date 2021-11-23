@@ -1,6 +1,8 @@
 build/
 cache/
 
+.vscode
+
 # Logs
 logs
 *.log

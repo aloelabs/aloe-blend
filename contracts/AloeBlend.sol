@@ -17,34 +17,25 @@ import "./AloeBlendERC20.sol";
 import "./UniswapMinter.sol";
 
 /*
-                                                                                                                        
-                                                   #                                                                    
-                                                  ###                                                                   
-                                                  #####                                                                 
-                               #                 #######                                *###*                           
-                                ###             #########                         ########                              
-                                #####         ###########                   ###########                                 
-                                ########    ############               ############                                     
-                                 ########    ###########         *##############                                        
-                                ###########   ########      #################                                           
-                                ############   ###      #################                                               
-                                ############       ##################                                                   
-                               #############    #################*         *#############*                              
-                              ##############    #############      #####################################                
-                             ###############   ####******      #######################*                                 
-                           ################                                                                             
-                         #################   *############################*                                             
-                           ##############    ######################################                                     
-                               ########    ################*                     **######*                              
-                                   ###    ###                                                                           
-                                                                                                                        
-         ___       ___       ___       ___            ___       ___       ___       ___       ___       ___       ___   
-        /\  \     /\__\     /\  \     /\  \          /\  \     /\  \     /\  \     /\  \     /\  \     /\  \     /\__\  
-       /::\  \   /:/  /    /::\  \   /::\  \        /::\  \   /::\  \   /::\  \   _\:\  \    \:\  \   /::\  \   /:/  /  
-      /::\:\__\ /:/__/    /:/\:\__\ /::\:\__\      /:/\:\__\ /::\:\__\ /::\:\__\ /\/::\__\   /::\__\ /::\:\__\ /:/__/   
-      \/\::/  / \:\  \    \:\/:/  / \:\:\/  /      \:\ \/__/ \/\::/  / \/\::/  / \::/\/__/  /:/\/__/ \/\::/  / \:\  \   
-        /:/  /   \:\__\    \::/  /   \:\/  /        \:\__\     /:/  /     \/__/   \:\__\    \/__/      /:/  /   \:\__\  
-        \/__/     \/__/     \/__/     \/__/          \/__/     \/__/               \/__/               \/__/     \/__/  
+                              #                                                                    
+                             ###                                                                   
+                             #####                                                                 
+          #                 #######                                *###*                           
+           ###             #########                         ########                              
+           #####         ###########                   ###########                                 
+           ########    ############               ############                                     
+            ########    ###########         *##############                                        
+           ###########   ########      #################                                           
+           ############   ###      #################                                               
+           ############       ##################                                                   
+          #############    #################*         *#############*                              
+         ##############    #############      #####################################                
+        ###############   ####******      #######################*                                 
+      ################                                                                             
+    #################   *############################*                                             
+      ##############    ######################################                                     
+          ########    ################*                     **######*                              
+              ###    ###                                                                           
 */
 
 uint256 constant TWO_96 = 2**96;
@@ -64,8 +55,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     /// @inheritdoc IAloeBlendImmutables
     uint24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
-    /// @inheritdoc IAloeBlendState
-    uint8 public override K = 20;
+    /// @inheritdoc IAloeBlendImmutables
+    uint8 public constant override K = 20;
 
     /// @inheritdoc IAloeBlendState
     uint256 public override maintenanceFee = 2500; // 2500 --> 25% of swap fees
@@ -127,7 +118,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getNextPositionWidth() public virtual view override returns (uint24 width, int24 tickTWAP) {
+    function getNextPositionWidth() public view override returns (uint24 width, int24 tickTWAP) {
         uint176 mean;
         uint176 sigma;
         (mean, sigma, tickTWAP) = fetchPriceStatistics();
@@ -141,7 +132,6 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendActions
-    /// @dev LOCK MODIFIER IS APPLIED IN AloeBlendCapped!!!
     function deposit(
         uint256 amount0Max,
         uint256 amount1Max,
@@ -149,8 +139,8 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint256 amount1Min
     )
         public
-        virtual
         override
+        lock
         returns (
             uint256 shares,
             uint256 amount0,

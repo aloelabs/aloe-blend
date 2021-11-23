@@ -6,9 +6,6 @@ import "../external/Uniswap.sol";
 import "./ISilo.sol";
 
 interface IAloeBlendState {
-    /// @dev The number of standard deviations to +/- from mean when setting Uniswap position
-    function K() external view returns (uint8);
-
     /// @dev The portion of swap fees (in basis points) that goes toward maintenance
     function maintenanceFee() external view returns (uint256);
 

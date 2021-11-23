@@ -12,4 +12,7 @@ interface IAloeBlendImmutables {
 
     /// @dev The minimum width (in ticks) of the Uniswap position
     function MIN_WIDTH() external view returns (uint24);
+
+    /// @dev The number of standard deviations to +/- from mean when setting Uniswap position
+    function K() external view returns (uint8);
 }
