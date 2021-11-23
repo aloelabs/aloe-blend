@@ -2,7 +2,7 @@
   "name": "aloe-blend",
   "version": "0.0.1",
   "main": "index.js",
-  "repository": "https://github.com/Aloe-Capital/aloe-blend.git",
+  "repository": "https://github.com/aloelabs/aloe-blend.git",
   "author": "Aloe Labs, Inc.",
   "license": "None",
   "private": true,

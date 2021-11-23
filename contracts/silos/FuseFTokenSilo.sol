@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "../libraries/FullMath.sol";
@@ -26,6 +26,8 @@ interface IFToken {
 contract FuseFTokenSilo is ISilo {
     using SafeERC20 for IERC20;
 
+    string public override name;
+
     address public immutable fToken;
 
     address public immutable uToken;
@@ -34,6 +36,8 @@ contract FuseFTokenSilo is ISilo {
         require(IFToken(_fToken).isCToken(), "Aloe: not an fToken");
         fToken = _fToken;
         uToken = IFToken(_fToken).underlying();
+
+        name = string(abi.encodePacked("Rari Fuse ", IERC20Metadata(uToken).symbol(), " Silo"));
     }
 
     function poke() external override {

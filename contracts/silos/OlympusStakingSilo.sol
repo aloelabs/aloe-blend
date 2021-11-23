@@ -18,6 +18,8 @@ interface IOlympusStaking {
 }
 
 contract OlympusStakingSilo is ISilo {
+    string public constant override name = "Olympus OHM Silo";
+
     IOlympusStaking public immutable olympusStaking;
 
     IERC20 public immutable OHM;
@@ -42,7 +44,7 @@ contract OlympusStakingSilo is ISilo {
 
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
-        
+
         _approve(address(sOHM), address(olympusStaking), type(uint256).max);
         olympusStaking.unstake(amount, false);
     }

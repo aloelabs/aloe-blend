@@ -30,7 +30,14 @@ interface IAloeBlendDerivedState {
      * @return sigma The standard deviation of the samples, or 0 if oracle isn't sufficiently initialized
      * @return tickTWAP The geometric mean tick spanning 6 minutes ago -> now
      */
-    function fetchPriceStatistics() external view returns (uint176 mean, uint176 sigma, int24 tickTWAP);
+    function fetchPriceStatistics()
+        external
+        view
+        returns (
+            uint176 mean,
+            uint176 sigma,
+            int24 tickTWAP
+        );
 
     /**
      * @notice Builds a memory array that can be passed to Uniswap V3's `observe` function to specify

@@ -30,6 +30,8 @@ IWETH constant WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 contract CompoundCEtherSilo is ISilo {
     using SafeERC20 for IERC20;
 
+    string public constant override name = "Compound WETH Silo";
+
     ICEther public immutable cEther;
 
     constructor(ICEther _cEther) {

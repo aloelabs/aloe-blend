@@ -2,8 +2,10 @@
 pragma solidity ^0.8.0;
 
 interface ISilo {
+    function name() external view returns (string memory);
+
     function poke() external;
-    
+
     function deposit(uint256 amount) external;
 
     function withdraw(uint256 amount) external;
