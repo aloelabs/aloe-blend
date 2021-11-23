@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -34,7 +34,7 @@ contract CompoundCTokenSilo is ISilo {
         cToken = _cToken;
         uToken = ICToken(_cToken).underlying();
 
-        name = string(abi.encodePacked("Compound ", IERC20Metadata(ICToken(_cToken).underlying()).symbol(), " Silo"));
+        name = string(abi.encodePacked("Compound ", IERC20Metadata(uToken).symbol(), " Silo"));
     }
 
     function poke() external override {

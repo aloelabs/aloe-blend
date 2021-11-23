@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -45,34 +45,34 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     using Silo for ISilo;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant override DIVISOR_OF_REBALANCE_REWARD = 4;
+    uint8 public constant DIVISOR_OF_REBALANCE_REWARD = 4;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant override DIVISOR_OF_SHRINK_URGENCY = 2;
+    uint8 public constant DIVISOR_OF_SHRINK_URGENCY = 2;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant override MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
+    uint24 public constant MIN_WIDTH = 1000; // 1000 --> 2.5% of total inventory
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant override K = 20;
+    uint8 public constant K = 20;
 
     /// @inheritdoc IAloeBlendState
-    uint256 public override maintenanceFee = 2500; // 2500 --> 25% of swap fees
+    uint256 public maintenanceFee = 2500; // 2500 --> 25% of swap fees
 
     /// @inheritdoc IAloeBlendState
-    uint256 public override maintenanceBudget0;
+    uint256 public maintenanceBudget0;
 
     /// @inheritdoc IAloeBlendState
-    uint256 public override maintenanceBudget1;
+    uint256 public maintenanceBudget1;
 
     /// @inheritdoc IAloeBlendState
-    Uniswap.Position public override uniswap;
+    Uniswap.Position public uniswap;
 
     /// @inheritdoc IAloeBlendState
-    ISilo public override silo0;
+    ISilo public silo0;
 
     /// @inheritdoc IAloeBlendState
-    ISilo public override silo1;
+    ISilo public silo1;
 
     /// @dev For reentrancy check
     bool private locked;
@@ -111,7 +111,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getInventory() public view override returns (uint256 inventory0, uint256 inventory1) {
+    function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
         // Everything in Uniswap
         (inventory0, inventory1) = uniswap.collectableAmountsAsOfLastPoke();
         // Everything in silos
@@ -123,13 +123,13 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getRebalanceUrgency() public view override returns (uint16 urgency) {
+    function getRebalanceUrgency() public view returns (uint16 urgency) {
         (uint24 width, int24 tickTWAP) = getNextPositionWidth();
         urgency = _computeRebalanceUrgency(uniswap, width, tickTWAP);
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getNextPositionWidth() public view override returns (uint24 width, int24 tickTWAP) {
+    function getNextPositionWidth() public view returns (uint24 width, int24 tickTWAP) {
         uint176 mean;
         uint176 sigma;
         (mean, sigma, tickTWAP) = fetchPriceStatistics();
@@ -150,7 +150,6 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint256 amount1Min
     )
         public
-        override
         lock
         returns (
             uint256 shares,
@@ -197,7 +196,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint256 shares,
         uint256 amount0Min,
         uint256 amount1Min
-    ) external override lock returns (uint256 amount0, uint256 amount1) {
+    ) external lock returns (uint256 amount0, uint256 amount1) {
         require(shares != 0, "Aloe: 0 shares");
         uint256 totalSupply = totalSupply() + 1;
         uint256 temp0;
@@ -245,7 +244,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendActions
-    function rebalance(uint8 rewardMode) external override lock {
+    function rebalance(uint8 rewardMode) external lock {
         Uniswap.Position memory _uniswap = uniswap;
         RebalanceCache memory cache;
 
@@ -326,7 +325,6 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     function fetchPriceStatistics()
         public
         view
-        override
         returns (
             uint176 mean,
             uint176 sigma,
@@ -373,7 +371,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function selectedOracleTimetable() public pure override returns (uint32[] memory secondsAgos) {
+    function selectedOracleTimetable() public pure returns (uint32[] memory secondsAgos) {
         secondsAgos = new uint32[](11);
         secondsAgos[0] = 6840;
         secondsAgos[1] = 6120;

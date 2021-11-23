@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -34,7 +34,7 @@ contract UniswapMinter is IUniswapV3MintCallback {
         uint256 amount0,
         uint256 amount1,
         bytes calldata
-    ) external override {
+    ) external {
         require(msg.sender == address(UNI_POOL), "Fake callback");
         if (amount0 != 0) TOKEN0.safeTransfer(msg.sender, amount0);
         if (amount1 != 0) TOKEN1.safeTransfer(msg.sender, amount1);

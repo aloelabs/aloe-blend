@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.10;
 
 interface IAloeBlendImmutables {
     /// @dev Indicates how much of `maintenanceBudget{0,1}` can be used in single rebalance
