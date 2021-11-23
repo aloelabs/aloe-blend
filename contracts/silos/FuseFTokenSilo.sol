@@ -37,7 +37,7 @@ contract FuseFTokenSilo is ISilo {
         fToken = _fToken;
         uToken = IFToken(_fToken).underlying();
 
-        name = string(abi.encodePacked("Rari Fuse ", IERC20Metadata(uToken).symbol(), " Silo"));
+        name = string(abi.encodePacked("Rari Fuse ", IERC20Metadata(IFToken(_fToken).underlying()).symbol(), " Silo"));
     }
 
     function poke() external override {

@@ -34,7 +34,7 @@ contract CompoundCTokenSilo is ISilo {
         cToken = _cToken;
         uToken = ICToken(_cToken).underlying();
 
-        name = string(abi.encodePacked("Compound ", IERC20Metadata(uToken).symbol(), " Silo"));
+        name = string(abi.encodePacked("Compound ", IERC20Metadata(ICToken(_cToken).underlying()).symbol(), " Silo"));
     }
 
     function poke() external override {

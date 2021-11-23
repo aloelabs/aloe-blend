@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./libraries/FullMath.sol";
@@ -88,11 +88,24 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     receive() external payable {}
 
     constructor(
-        IUniswapV3Pool uniPool,
+        IUniswapV3Pool _uniPool,
         ISilo _silo0,
         ISilo _silo1
-    ) AloeBlendERC20() UniswapMinter(uniPool) {
-        uniswap.pool = uniPool;
+    )
+        AloeBlendERC20(
+            // ex: Aloe Blend USDC/WETH
+            string(
+                abi.encodePacked(
+                    "Aloe Blend ",
+                    IERC20Metadata(_uniPool.token0()).symbol(),
+                    "/",
+                    IERC20Metadata(_uniPool.token1()).symbol()
+                )
+            )
+        )
+        UniswapMinter(_uniPool)
+    {
+        uniswap.pool = _uniPool;
         silo0 = _silo0;
         silo1 = _silo1;
     }
