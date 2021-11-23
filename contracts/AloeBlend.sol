@@ -7,9 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./libraries/FullMath.sol";
 import "./libraries/TickMath.sol";
 import "./libraries/Silo.sol";
-
-import "./external/Uniswap.sol";
-import "./external/WETH.sol";
+import "./libraries/Uniswap.sol";
 
 import "./interfaces/IAloeBlend.sol";
 

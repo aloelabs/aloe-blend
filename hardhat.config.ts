@@ -66,7 +66,7 @@ module.exports = {
   paths: {
     sources: "./contracts",
     tests: "./tests",
-    artifacts: "./build",
+    artifacts: "./build_hardhat",
   },
   mocha: mochaConfig,
 };

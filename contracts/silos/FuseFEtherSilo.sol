@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "../libraries/FullMath.sol";
-import "../external/WETH.sol";
 import "../interfaces/ISilo.sol";
 
 interface IFEther {
@@ -21,6 +20,14 @@ interface IFEther {
 
     function isCEther() external view returns (bool);
 }
+
+interface IWETH {
+    function deposit() external payable;
+
+    function withdraw(uint256) external;
+}
+
+IWETH constant WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
 contract FuseFEtherSilo is ISilo {
     using SafeERC20 for IERC20;
