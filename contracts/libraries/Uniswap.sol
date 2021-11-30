@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
@@ -10,7 +9,6 @@ import "./LiquidityAmounts.sol";
 import "./TickMath.sol";
 
 library Uniswap {
-    using SafeERC20 for IERC20;
 
     struct Position {
         // The pool the position is in

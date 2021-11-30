@@ -2,7 +2,6 @@
 pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "../libraries/FullMath.sol";
 import "../interfaces/ISilo.sol";
@@ -30,7 +29,6 @@ interface IWETH {
 IWETH constant WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
 contract FuseFEtherSilo is ISilo {
-    using SafeERC20 for IERC20;
 
     string public constant override name = "Rari Fuse WETH Silo";
 

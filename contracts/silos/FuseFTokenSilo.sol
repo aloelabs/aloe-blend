@@ -2,7 +2,6 @@
 pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "../libraries/FullMath.sol";
 import "../interfaces/ISilo.sol";
@@ -24,7 +23,6 @@ interface IFToken {
 }
 
 contract FuseFTokenSilo is ISilo {
-    using SafeERC20 for IERC20;
 
     string public override name;
 

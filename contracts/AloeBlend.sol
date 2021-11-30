@@ -3,6 +3,7 @@ pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import "./libraries/FullMath.sol";
 import "./libraries/TickMath.sol";
@@ -39,7 +40,7 @@ import "./UniswapMinter.sol";
 uint256 constant TWO_96 = 2**96;
 uint256 constant TWO_144 = 2**144;
 
-contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
+contract AloeBlend is AloeBlendERC20, UniswapMinter, ReentrancyGuard, IAloeBlend {
     using SafeERC20 for IERC20;
     using Uniswap for Uniswap.Position;
     using Silo for ISilo;
@@ -76,13 +77,6 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
 
     /// @dev For reentrancy check
     bool private locked;
-
-    modifier lock() {
-        require(!locked, "Aloe: Locked");
-        locked = true;
-        _;
-        locked = false;
-    }
 
     /// @dev Required for some silos
     receive() external payable {}
@@ -150,7 +144,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint256 amount1Min
     )
         public
-        lock
+        nonReentrant
         returns (
             uint256 shares,
             uint256 amount0,
@@ -188,25 +182,25 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
         uint256 shares,
         uint256 amount0Min,
         uint256 amount1Min
-    ) external lock returns (uint256 amount0, uint256 amount1) {
+    ) external nonReentrant returns (uint256 amount0, uint256 amount1) {
         require(shares != 0, "Aloe: 0 shares");
-        uint256 totalSupply = totalSupply() + 1;
+        uint256 _totalSupply = totalSupply + 1;
         uint256 temp0;
         uint256 temp1;
 
         // Portion from contract
         // NOTE: Must be done FIRST to ensure we don't double count things after exiting Uniswap/silos
-        amount0 = FullMath.mulDiv(_balance0(), shares, totalSupply);
-        amount1 = FullMath.mulDiv(_balance1(), shares, totalSupply);
+        amount0 = FullMath.mulDiv(_balance0(), shares, _totalSupply);
+        amount1 = FullMath.mulDiv(_balance1(), shares, _totalSupply);
 
         // Portion from Uniswap
-        (temp0, temp1) = _withdrawFractionFromUniswap(shares, totalSupply);
+        (temp0, temp1) = _withdrawFractionFromUniswap(shares, _totalSupply);
         amount0 += temp0;
         amount1 += temp1;
 
         // Portion from silos
-        temp0 = FullMath.mulDiv(silo0.balanceOf(address(this)), shares, totalSupply);
-        temp1 = FullMath.mulDiv(silo1.balanceOf(address(this)), shares, totalSupply);
+        temp0 = FullMath.mulDiv(silo0.balanceOf(address(this)), shares, _totalSupply);
+        temp1 = FullMath.mulDiv(silo1.balanceOf(address(this)), shares, _totalSupply);
         silo0.delegate_withdraw(temp0);
         silo1.delegate_withdraw(temp1);
         amount0 += temp0;
@@ -236,7 +230,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendActions
-    function rebalance(uint8 rewardMode) external lock {
+    function rebalance(uint8 rewardMode) external nonReentrant {
         Uniswap.Position memory _uniswap = uniswap;
         RebalanceCache memory cache;
 
@@ -307,7 +301,7 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             _uniswap.upper,
             cache.magic,
             cache.urgency,
-            totalSupply(),
+            totalSupply,
             inventory0,
             inventory1
         );
@@ -394,13 +388,13 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             uint256 amount1
         )
     {
-        uint256 totalSupply = totalSupply();
+        uint256 _totalSupply = totalSupply;
         (uint256 inventory0, uint256 inventory1) = getInventory();
 
         // If total supply > 0, pool can't be empty
-        assert(totalSupply == 0 || inventory0 != 0 || inventory1 != 0);
+        assert(_totalSupply == 0 || inventory0 != 0 || inventory1 != 0);
 
-        if (totalSupply == 0) {
+        if (_totalSupply == 0) {
             // For first deposit, enforce 50/50 ratio
             amount0 = FullMath.mulDiv(amount1Max, TWO_96, priceX96);
 
@@ -414,20 +408,20 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, IAloeBlend {
             }
         } else if (inventory0 == 0) {
             amount1 = amount1Max;
-            shares = FullMath.mulDiv(amount1, totalSupply, inventory1);
+            shares = FullMath.mulDiv(amount1, _totalSupply, inventory1);
         } else if (inventory1 == 0) {
             amount0 = amount0Max;
-            shares = FullMath.mulDiv(amount0, totalSupply, inventory0);
+            shares = FullMath.mulDiv(amount0, _totalSupply, inventory0);
         } else {
             amount0 = FullMath.mulDiv(amount1Max, inventory0, inventory1);
 
             if (amount0 < amount0Max) {
                 amount1 = amount1Max;
-                shares = FullMath.mulDiv(amount1, totalSupply, inventory1);
+                shares = FullMath.mulDiv(amount1, _totalSupply, inventory1);
             } else {
                 amount0 = amount0Max;
                 amount1 = FullMath.mulDiv(amount0, inventory1, inventory0);
-                shares = FullMath.mulDiv(amount0, totalSupply, inventory0);
+                shares = FullMath.mulDiv(amount0, _totalSupply, inventory0);
             }
         }
     }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.10;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
+import "@rari-capital/solmate/src/tokens/ERC20.sol";
 
-contract AloeBlendERC20 is ERC20Permit {
-    constructor(string memory name) ERC20Permit(name) ERC20(name, "ALOE-BLEND") {}
+contract AloeBlendERC20 is ERC20 {
+    constructor(string memory _name) ERC20(_name, "ALOE-BLEND", 18) {}
 }

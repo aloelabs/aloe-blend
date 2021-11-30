@@ -346,6 +346,10 @@
   resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.3.3.tgz#ff6ee919fc2a1abaf72b22814bfb72ed129ec137"
   integrity sha512-tDBopO1c98Yk7Cv/PZlHqrvtVjlgK5R4J6jxLwoO7qxK4xqOiZG+zSkIvGFpPZ0ikc3QOED3plgdqjgNTnBc7g==
 
+"@rari-capital/solmate@https://github.com/Rari-Capital/solmate":
+  version "5.0.2"
+  resolved "https://github.com/Rari-Capital/solmate#1116070fe7dc2200e6696d0047cdf7b22acff137"
+
 "@sentry/core@5.30.0":
   version "5.30.0"
   resolved "https://registry.yarnpkg.com/@sentry/core/-/core-5.30.0.tgz#6b203664f69e75106ee8b5a2fe1d717379b331f3"
