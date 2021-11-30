@@ -16,54 +16,60 @@ library FullMath {
         uint256 b,
         uint256 denominator
     ) internal pure returns (uint256 result) {
+        // Handle division by zero
+        require(denominator != 0);
+
+        // 512-bit multiply [prod1 prod0] = a * b
+        // Compute the product mod 2**256 and mod 2**256 - 1
+        // then use the Chinese Remainder Theorem to reconstruct
+        // the 512 bit result. The result is stored in two 256
+        // variables such that product = prod1 * 2**256 + prod0
+        uint256 prod0; // Least significant 256 bits of the product
+        uint256 prod1; // Most significant 256 bits of the product
+        assembly {
+            let mm := mulmod(a, b, not(0))
+            prod0 := mul(a, b)
+            prod1 := sub(sub(mm, prod0), lt(mm, prod0))
+        }
+
+        // Short circuit 256 by 256 division
+        // This saves gas when a * b is small, at the cost of making the
+        // large case a bit more expensive. Depending on your use case you
+        // may want to remove this short circuit and always go through the
+        // 512 bit path.
+        if (prod1 == 0) {
+            assembly {
+                result := div(prod0, denominator)
+            }
+            return result;
+        }
+
+        ///////////////////////////////////////////////
+        // 512 by 256 division.
+        ///////////////////////////////////////////////
+
+        // Handle overflow, the result must be < 2**256
+        require(prod1 < denominator);
+
+        // Make division exact by subtracting the remainder from [prod1 prod0]
+        // Compute remainder using mulmod
+        // Note mulmod(_, _, 0) == 0
+        uint256 remainder;
+        assembly {
+            remainder := mulmod(a, b, denominator)
+        }
+        // Subtract 256 bit number from 512 bit number
+        assembly {
+            prod1 := sub(prod1, gt(remainder, prod0))
+            prod0 := sub(prod0, remainder)
+        }
+
+        // Factor powers of two out of denominator
+        // Compute largest power of two divisor of denominator.
+        // Always >= 1.
         unchecked {
-            // 512-bit multiply [prod1 prod0] = a * b
-            // Compute the product mod 2**256 and mod 2**256 - 1
-            // then use the Chinese Remainder Theorem to reconstruct
-            // the 512 bit result. The result is stored in two 256
-            // variables such that product = prod1 * 2**256 + prod0
-            uint256 prod0; // Least significant 256 bits of the product
-            uint256 prod1; // Most significant 256 bits of the product
-            assembly {
-                let mm := mulmod(a, b, not(0))
-                prod0 := mul(a, b)
-                prod1 := sub(sub(mm, prod0), lt(mm, prod0))
-            }
-
-            // Handle non-overflow cases, 256 by 256 division
-            if (prod1 == 0) {
-                require(denominator > 0);
-                assembly {
-                    result := div(prod0, denominator)
-                }
-                return result;
-            }
-
-            // Make sure the result is less than 2**256.
-            // Also prevents denominator == 0
-            require(denominator > prod1);
-
-            ///////////////////////////////////////////////
-            // 512 by 256 division.
-            ///////////////////////////////////////////////
-
-            // Make division exact by subtracting the remainder from [prod1 prod0]
-            // Compute remainder using mulmod
-            uint256 remainder;
-            assembly {
-                remainder := mulmod(a, b, denominator)
-            }
-            // Subtract 256 bit number from 512 bit number
-            assembly {
-                prod1 := sub(prod1, gt(remainder, prod0))
-                prod0 := sub(prod0, remainder)
-            }
-
-            // Factor powers of two out of denominator
-            // Compute largest power of two divisor of denominator.
-            // Always >= 1.
             // https://ethereum.stackexchange.com/a/96646
-            uint256 twos = denominator & (~denominator + 1);
+            uint256 twos = (type(uint256).max - denominator + 1) & denominator;
             // Divide denominator by power of two
             assembly {
                 denominator := div(denominator, twos)
@@ -86,6 +92,7 @@ library FullMath {
             // modulo 2**256 such that denominator * inv = 1 mod 2**256.
             // Compute the inverse by starting with a seed that is correct
             // correct for four bits. That is, denominator * inv = 1 mod 2**4
+            // If denominator is zero the inverse starts with 2
             uint256 inv = (3 * denominator) ^ 2;
             // Now use Newton-Raphson iteration to improve the precision.
             // Thanks to Hensel's lifting lemma, this also works in modular
@@ -96,6 +103,7 @@ library FullMath {
             inv *= 2 - denominator * inv; // inverse mod 2**64
             inv *= 2 - denominator * inv; // inverse mod 2**128
             inv *= 2 - denominator * inv; // inverse mod 2**256
+            // If denominator is zero, inv is now 128
 
             // Because the division is now exact we can divide by multiplying
             // with the modular inverse of denominator. This will give us the
