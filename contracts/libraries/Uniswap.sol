@@ -1,15 +1,15 @@
-// SPDX-License-Identifier: Unlicense
+// SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
+import "./FixedPoint128.sol";
 import "./LiquidityAmounts.sol";
 import "./TickMath.sol";
 
 library Uniswap {
-
     struct Position {
         // The pool the position is in
         IUniswapV3Pool pool;
@@ -32,7 +32,7 @@ library Uniswap {
         position.pool.mint(address(this), position.lower, position.upper, liquidity, "");
     }
 
-    /// @dev Withdraws all liquidity and collects all fees
+    /// @dev Withdraws liquidity and collects all fees
     function withdraw(Position memory position, uint128 liquidity)
         internal
         returns (
@@ -136,5 +136,61 @@ library Uniswap {
                 TickMath.getSqrtRatioAtTick(position.upper),
                 amount1
             );
+    }
+
+    /// @dev Computes the liquidity of `position` and any fees earned by it
+    function liquidityAndFees(Position memory position, int24 tickCurrent)
+        internal
+        view
+        returns (
+            uint128 liquidity,
+            uint256 earned0,
+            uint256 earned1
+        )
+    {
+        uint256 feeGrowthInside0LastX128;
+        uint256 feeGrowthInside1LastX128;
+        uint128 tokensOwed0;
+        uint128 tokensOwed1;
+        (liquidity, feeGrowthInside0LastX128, feeGrowthInside1LastX128, tokensOwed0, tokensOwed1) = info(position);
+
+        (uint256 poolFeeGrowthInside0LastX128, uint256 poolFeeGrowthInside1LastX128) = _getFeeGrowthInside(
+            position.pool,
+            tickCurrent,
+            position.lower,
+            position.upper
+        );
+
+        earned0 =
+            FullMath.mulDiv(poolFeeGrowthInside0LastX128 - feeGrowthInside0LastX128, liquidity, FixedPoint128.Q128) +
+            tokensOwed0;
+        earned1 =
+            FullMath.mulDiv(poolFeeGrowthInside1LastX128 - feeGrowthInside1LastX128, liquidity, FixedPoint128.Q128) +
+            tokensOwed1;
+    }
+
+    function _getFeeGrowthInside(
+        IUniswapV3Pool pool,
+        int24 tickCurrent,
+        int24 tickLower,
+        int24 tickUpper
+    ) private view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , , ) = pool.ticks(tickLower);
+        (, , uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128, , , , ) = pool.ticks(tickUpper);
+
+        unchecked {
+            if (tickCurrent < tickLower) {
+                feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+            } else if (tickCurrent < tickUpper) {
+                uint256 feeGrowthGlobal0X128 = pool.feeGrowthGlobal0X128();
+                uint256 feeGrowthGlobal1X128 = pool.feeGrowthGlobal1X128();
+                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+            } else {
+                feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
+            }
+        }
     }
 }

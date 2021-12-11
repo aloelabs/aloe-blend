@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import "./libraries/FullMath.sol";
 import "./libraries/TickMath.sol";
+import "./libraries/OracleLibrary.sol";
 import "./libraries/Silo.sol";
 import "./libraries/Uniswap.sol";
 
@@ -370,6 +371,33 @@ contract AloeBlend is AloeBlendERC20, UniswapMinter, ReentrancyGuard, IAloeBlend
         secondsAgos[8] = 1080;
         secondsAgos[9] = 360;
         secondsAgos[10] = 0;
+    }
+
+    function fetchIV()
+        public
+        view
+        returns (
+            uint176 mean,
+            uint176 sigma,
+            int24 tickTWAP
+        )
+    {
+        Uniswap.Position memory _uniswap = uniswap;
+        (
+            uint160 sqrtPriceX96,
+            int24 currentTick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            , ,
+        ) = _uniswap.pool.slot0();
+
+        Uniswap.Position memory active = Uniswap.Position(IUniswapV3Pool(address(0)), currentTick, currentTick);
+        active = _coerceTicksToSpacing(active);
+        (uint256 amount0Active, uint256 amount1Active) = active.amountsForLiquidity(sqrtPriceX96, _uniswap.pool.liquidity());
+
+        (uint128 liquidityOurs, uint256 earned0, uint256 earned1) = _uniswap.liquidityAndFees(currentTick);
+
+        (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity) = OracleLibrary
     }
 
     /// @dev Calculates the largest possible `amount0` and `amount1` such that

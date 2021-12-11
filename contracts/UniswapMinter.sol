@@ -35,7 +35,7 @@ contract UniswapMinter is IUniswapV3MintCallback {
         uint256 amount1,
         bytes calldata
     ) external {
-        require(msg.sender == address(UNI_POOL), "Fake callback");
+        require(msg.sender == address(UNI_POOL));
         if (amount0 != 0) TOKEN0.safeTransfer(msg.sender, amount0);
         if (amount1 != 0) TOKEN1.safeTransfer(msg.sender, amount1);
 
