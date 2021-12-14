@@ -101,6 +101,20 @@ library Uniswap {
             );
     }
 
+    function valueOfLiquidity(
+        Position memory position,
+        uint160 sqrtPriceX96,
+        uint128 liquidity
+    ) internal pure returns (uint192) {
+        (uint192 value0, uint192 value1) = LiquidityAmounts.getValuesOfLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(position.lower),
+            TickMath.getSqrtRatioAtTick(position.upper),
+            liquidity
+        );
+        return value0 + value1;
+    }
+
     /// @dev Wrapper around `LiquidityAmounts.getLiquidityForAmounts()`.
     function liquidityForAmounts(
         Position memory position,
@@ -136,61 +150,5 @@ library Uniswap {
                 TickMath.getSqrtRatioAtTick(position.upper),
                 amount1
             );
-    }
-
-    /// @dev Computes the liquidity of `position` and any fees earned by it
-    function liquidityAndFees(Position memory position, int24 tickCurrent)
-        internal
-        view
-        returns (
-            uint128 liquidity,
-            uint256 earned0,
-            uint256 earned1
-        )
-    {
-        uint256 feeGrowthInside0LastX128;
-        uint256 feeGrowthInside1LastX128;
-        uint128 tokensOwed0;
-        uint128 tokensOwed1;
-        (liquidity, feeGrowthInside0LastX128, feeGrowthInside1LastX128, tokensOwed0, tokensOwed1) = info(position);
-
-        (uint256 poolFeeGrowthInside0LastX128, uint256 poolFeeGrowthInside1LastX128) = _getFeeGrowthInside(
-            position.pool,
-            tickCurrent,
-            position.lower,
-            position.upper
-        );
-
-        earned0 =
-            FullMath.mulDiv(poolFeeGrowthInside0LastX128 - feeGrowthInside0LastX128, liquidity, FixedPoint128.Q128) +
-            tokensOwed0;
-        earned1 =
-            FullMath.mulDiv(poolFeeGrowthInside1LastX128 - feeGrowthInside1LastX128, liquidity, FixedPoint128.Q128) +
-            tokensOwed1;
-    }
-
-    function _getFeeGrowthInside(
-        IUniswapV3Pool pool,
-        int24 tickCurrent,
-        int24 tickLower,
-        int24 tickUpper
-    ) private view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
-        (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , , ) = pool.ticks(tickLower);
-        (, , uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128, , , , ) = pool.ticks(tickUpper);
-
-        unchecked {
-            if (tickCurrent < tickLower) {
-                feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
-            } else if (tickCurrent < tickUpper) {
-                uint256 feeGrowthGlobal0X128 = pool.feeGrowthGlobal0X128();
-                uint256 feeGrowthGlobal1X128 = pool.feeGrowthGlobal1X128();
-                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
-            } else {
-                feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
-            }
-        }
     }
 }
