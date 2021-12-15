@@ -17,14 +17,14 @@ contract OracleExposed is Oracle {
         return _estimateIV(_metadata, _data, _positionLiquidity, _tokensOwed0, _tokensOwed1, _ageOfPositionRevenue);
     }
 
-    function exposed_computePositionRevenueXGamma(
+    function exposed_computeGammaTPositionRevenue(
         int24 _arithmeticMeanTick,
         uint24 _gamma0,
         uint24 _gamma1,
         uint128 _tokensOwed0,
         uint128 _tokensOwed1
     ) external pure returns (uint256 positionRevenue) {
-        return _computePositionRevenueXGamma(_arithmeticMeanTick, _gamma0, _gamma1, _tokensOwed0, _tokensOwed1);
+        return _computeGammaTPositionRevenue(_arithmeticMeanTick, _gamma0, _gamma1, _tokensOwed0, _tokensOwed1);
     }
 
     function exposed_computeSqrtPoolRevenue(
@@ -52,25 +52,92 @@ contract OracleTest is DSTest {
         oracleExposed = new OracleExposed();
     }
 
-    function test_pure_estimateIV(
+    function test_cacheMetadataFor() public {
+        IUniswapV3Pool pool = IUniswapV3Pool(0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8);
+
+        (uint32 oldestObservation, uint24 gamma0, uint24 gamma1, int24 tickSpacing) = oracleExposed.cachedPoolMetadata(
+            address(pool)
+        );
+        assertEq(oldestObservation, 0);
+        assertEq(gamma0, 0);
+        assertEq(gamma1, 0);
+        assertEq(tickSpacing, 0);
+
+        oracleExposed.cacheMetadataFor(pool);
+        (oldestObservation, gamma0, gamma1, tickSpacing) = oracleExposed.cachedPoolMetadata(address(pool));
+        assertEq(oldestObservation, 356414);
+        assertEq(gamma0, 3000);
+        assertEq(gamma1, 3000);
+        assertEq(tickSpacing, 60);
+    }
+
+    function test_view_estimateIV() public {
+        IUniswapV3Pool pool = IUniswapV3Pool(0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8);
+        oracleExposed.cacheMetadataFor(pool);
+
+        uint256 dailyIV = oracleExposed.estimateIV(
+            pool,
+            IUniswapV3PoolSlot(address(pool)).slot0(),
+            347873518912231,
+            750000,
+            195000000000000,
+            77820
+        );
+
+        assertEq(dailyIV, 12647682461913853); // 1.265%
+    }
+
+    function test_pure_estimateIV1() public {
+        Oracle.PoolMetadata memory metadata = Oracle.PoolMetadata(3600, 3000, 3000, 60);
+        Oracle.PoolData memory data = Oracle.PoolData(
+            1278673744380353403099539498152303, // sqrtPriceX96
+            193789, // currentTick
+            193730, // arithmeticMeanTick
+            19743397700000000000, // harmonicMeanLiquidity
+            19685271204911047580 // poolLiquidity
+        );
+        uint256 dailyIV = oracleExposed.exposed_estimateIV(
+            metadata,
+            data,
+            347873518912231, // positionLiquidity
+            750000, // tokensOwed0
+            195000000000000, // tokensOwed1
+            77820 // ageOfPositionRevenue
+        );
+
+        assertEq(dailyIV, 17581497014297400); // 1.758%
+    }
+
+    function test_pure_estimateIV2(
         uint128 positionLiquidity,
         uint128 tokensOwed0,
         uint128 tokensOwed1
     ) public {
         Oracle.PoolMetadata memory metadata = Oracle.PoolMetadata(3600, 3000, 3000, 60);
         Oracle.PoolData memory data = Oracle.PoolData(
-            TickMath.getSqrtRatioAtTick(100101),
-            100101,
-            100200,
-            30000000000000000,
-            18591094961929451828
+            1278673744380353403099539498152303, // sqrtPriceX96
+            193789, // currentTick
+            193730, // arithmeticMeanTick
+            19743397700000000000, // harmonicMeanLiquidity
+            19685271204911047580 // poolLiquidity
         );
-        uint256 IV = oracleExposed.exposed_estimateIV(metadata, data, positionLiquidity, tokensOwed0, tokensOwed1, 86400);
+        uint256 dailyIV = oracleExposed.exposed_estimateIV(
+            metadata,
+            data,
+            positionLiquidity,
+            tokensOwed0,
+            tokensOwed1,
+            86400
+        );
 
-        if (positionLiquidity > 1_000_000 && (tokensOwed0 > 1e6 || tokensOwed1 > 1e6)) assertGt(IV, 0);
+        if (
+            (1_000_000 < positionLiquidity) &&
+            (positionLiquidity < data.harmonicMeanLiquidity) &&
+            (tokensOwed0 > 1e6 || tokensOwed1 > 1e6)
+        ) assertGt(dailyIV, 0);
     }
 
-    function test_pure_computePositionRevenueXGamma(
+    function test_pure_computeGammaTPositionRevenue(
         int24 _arithmeticMeanTick,
         uint16 _gamma0,
         uint16 _gamma1,
@@ -81,7 +148,7 @@ contract OracleTest is DSTest {
         if (_arithmeticMeanTick > TickMath.MAX_TICK) _arithmeticMeanTick = TickMath.MAX_TICK;
 
         // Ensure it doesn't revert
-        uint256 positionRevenue = oracleExposed.exposed_computePositionRevenueXGamma(
+        uint256 positionRevenue = oracleExposed.exposed_computeGammaTPositionRevenue(
             _arithmeticMeanTick,
             _gamma0,
             _gamma1,

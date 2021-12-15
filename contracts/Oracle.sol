@@ -7,6 +7,10 @@ import "./libraries/TickMath.sol";
 import "./libraries/OracleLibrary.sol";
 import "./libraries/Uniswap.sol";
 
+interface IUniswapV3PoolSlot {
+    function slot0() external view returns (Oracle.Slot0 memory);
+}
+
 contract Oracle {
     using Uniswap for Uniswap.Position;
 
@@ -121,16 +125,16 @@ contract Oracle {
     ) internal pure returns (uint256) {
         if (_data.poolLiquidity == 0 || _positionLiquidity == 0) return 0;
 
-        uint128 sqrtPoolRevenue = _computeSqrtPoolRevenue(
-            _computePositionRevenueXGamma(
+        uint128 sqrtGammaTPoolRevenue = _computeSqrtPoolRevenue(
+            _computeGammaTPositionRevenue(
                 _data.arithmeticMeanTick,
                 _metadata.gamma0,
                 _metadata.gamma1,
                 _tokensOwed0,
                 _tokensOwed1
             ),
-            _data.harmonicMeanLiquidity,
-            _positionLiquidity
+            _positionLiquidity,
+            _data.harmonicMeanLiquidity
         );
         uint128 sqrtTickTVLX32 = uint128(
             Math.sqrt(
@@ -142,10 +146,10 @@ contract Oracle {
         uint48 timeAdjustmentX32 = uint48(Math.sqrt((uint256(1 days) << 64) / _ageOfPositionRevenue));
 
         if (sqrtTickTVLX32 == 0) return 0;
-        return (uint256(20_000) * timeAdjustmentX32 * sqrtPoolRevenue) / sqrtTickTVLX32;
+        return (uint256(2e18) * timeAdjustmentX32 * sqrtGammaTPoolRevenue) / sqrtTickTVLX32;
     }
 
-    function _computePositionRevenueXGamma(
+    function _computeGammaTPositionRevenue(
         int24 _arithmeticMeanTick,
         uint24 _gamma0,
         uint24 _gamma1,
@@ -153,7 +157,7 @@ contract Oracle {
         uint128 _tokensOwed1
     ) internal pure returns (uint256 positionRevenue) {
         uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(_arithmeticMeanTick);
-        uint224 geometricMeanPrice = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, FixedPoint96.Q96));
+        uint224 geometricMeanPriceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, FixedPoint96.Q96));
 
         // Doesn't overflow because swap fees must be <<< 100%
         unchecked {
@@ -165,7 +169,7 @@ contract Oracle {
         // *at that swap*, but that's not possible here. But for prices simulated with GBM and swap sizes
         // either normally or uniformly distributed, the error you get from using geometric mean price is
         // <1% even with high drift and volatility.
-        positionRevenue = FullMath.mulDiv(_tokensOwed0, geometricMeanPrice, FixedPoint96.Q96) + _tokensOwed1;
+        positionRevenue = FullMath.mulDiv(_tokensOwed0, geometricMeanPriceX96, FixedPoint96.Q96) + _tokensOwed1;
     }
 
     /// @dev assumes _positionLiquidity != 0
