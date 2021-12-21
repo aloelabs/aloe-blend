@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 import "./FixedPoint128.sol";
@@ -99,20 +97,6 @@ library Uniswap {
                 TickMath.getSqrtRatioAtTick(position.upper),
                 liquidity
             );
-    }
-
-    function valueOfLiquidity(
-        Position memory position,
-        uint160 sqrtPriceX96,
-        uint128 liquidity
-    ) internal pure returns (uint192) {
-        (uint192 value0, uint192 value1) = LiquidityAmounts.getValuesOfLiquidity(
-            sqrtPriceX96,
-            TickMath.getSqrtRatioAtTick(position.lower),
-            TickMath.getSqrtRatioAtTick(position.upper),
-            liquidity
-        );
-        return value0 + value1;
     }
 
     /// @dev Wrapper around `LiquidityAmounts.getLiquidityForAmounts()`.
