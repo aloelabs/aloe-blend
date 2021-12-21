@@ -15,6 +15,23 @@ contract AloeBlendFake is AloeBlend {
     function computeNextPositionWidth(uint256 IV) external pure returns (uint24 width) {
         width = _computeNextPositionWidth(IV);
     }
+
+    function computeAmountsForPrimary(
+        uint256 inventory0,
+        uint256 inventory1,
+        uint224 priceX96,
+        uint24 halfWidth
+    )
+        external
+        pure
+        returns (
+            uint256,
+            uint256,
+            uint96
+        )
+    {
+        return _computeAmountsForPrimary(inventory0, inventory1, priceX96, halfWidth);
+    }
 }
 
 contract AloeBlendTest is DSTest {
@@ -40,5 +57,42 @@ contract AloeBlendTest is DSTest {
         assertEq(blend.computeNextPositionWidth(1e17), 4054);
         assertEq(blend.computeNextPositionWidth(2e17), 8473);
         assertEq(blend.computeNextPositionWidth(4e17), 13864);
+    }
+
+    function test_computeAmountsForPrimary(
+        uint128 inventory0,
+        uint128 inventory1,
+        uint224 priceX96,
+        uint24 halfWidth
+    ) public {
+        if (halfWidth < blend.MIN_WIDTH() / 2) return;
+        if (halfWidth > blend.MAX_WIDTH() / 2) return;
+
+        (uint256 amount0, uint256 amount1, uint96 magic) = blend.computeAmountsForPrimary(
+            inventory0,
+            inventory1,
+            priceX96,
+            halfWidth
+        );
+
+        assertLt(amount0, inventory0);
+        assertLt(amount1, inventory1);
+        assertLt(magic, 2 ** 96);
+    }
+
+    function test_spec_computeAmountsForPrimary() public {
+        uint256 amount0;
+        uint256 amount1;
+        uint96 magic;
+
+        (amount0, amount1, magic) = blend.computeAmountsForPrimary(0, 0, 100000, blend.MIN_WIDTH());
+        assertEq(amount0, 0);
+        assertEq(amount1, 0);
+        assertEq(magic, 792215870747104703836069196);
+
+        (amount0, amount1, magic) = blend.computeAmountsForPrimary(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH());
+        assertEq(amount0, 555565);
+        assertEq(amount1, 1111130);
+        assertEq(magic, 39614800711660855234216192339);
     }
 }

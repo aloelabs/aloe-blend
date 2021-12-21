@@ -9,29 +9,29 @@ import "./TickMath.sol";
 
 library Uniswap {
     struct Position {
-        // The pool the position is in
-        IUniswapV3Pool pool;
         // Lower tick of the position
         int24 lower;
         // Upper tick of the position
         int24 upper;
+        // Liquidity in the position
+        uint128 liquidity;
     }
 
     /// @dev Do zero-burns to poke the Uniswap pools so earned fees are updated
-    function poke(Position memory position) internal {
-        (uint128 liquidity, , , , ) = info(position);
+    function poke(Position memory position, IUniswapV3Pool pool) internal {
+        (uint128 liquidity, , , , ) = info(position, pool);
         if (liquidity == 0) return;
-        position.pool.burn(position.lower, position.upper, 0);
+        pool.burn(position.lower, position.upper, 0);
     }
 
     /// @dev Deposits liquidity in a range on the Uniswap pool.
-    function deposit(Position memory position, uint128 liquidity) internal {
+    function deposit(Position memory position, IUniswapV3Pool pool, uint128 liquidity) internal {
         if (liquidity == 0) return;
-        position.pool.mint(address(this), position.lower, position.upper, liquidity, "");
+        pool.mint(address(this), position.lower, position.upper, liquidity, "");
     }
 
     /// @dev Withdraws liquidity and collects all fees
-    function withdraw(Position memory position, uint128 liquidity)
+    function withdraw(Position memory position, IUniswapV3Pool pool, uint128 liquidity)
         internal
         returns (
             uint256 burned0,
@@ -40,12 +40,10 @@ library Uniswap {
             uint256 earned1
         )
     {
-        if (liquidity != 0) {
-            (burned0, burned1) = position.pool.burn(position.lower, position.upper, liquidity);
-        }
+        (burned0, burned1) = pool.burn(position.lower, position.upper, liquidity);
 
         // Collect all owed tokens including earned fees
-        (uint256 collected0, uint256 collected1) = position.pool.collect(
+        (uint256 collected0, uint256 collected1) = pool.collect(
             address(this),
             position.lower,
             position.upper,
@@ -53,24 +51,26 @@ library Uniswap {
             type(uint128).max
         );
 
-        earned0 = collected0 - burned0;
-        earned1 = collected1 - burned1;
+        unchecked {
+            earned0 = collected0 - burned0;
+            earned1 = collected1 - burned1;
+        }
     }
 
     /**
      * @notice Amounts of TOKEN0 and TOKEN1 held in vault's position. Includes
      * owed fees, except those accrued since last poke.
      */
-    function collectableAmountsAsOfLastPoke(Position memory position) internal view returns (uint256, uint256) {
-        (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position);
-        (uint160 sqrtPriceX96, , , , , , ) = position.pool.slot0();
+    function collectableAmountsAsOfLastPoke(Position memory position, IUniswapV3Pool pool) internal view returns (uint256, uint256) {
+        (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position, pool);
+        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
         (uint256 burnable0, uint256 burnable1) = amountsForLiquidity(position, sqrtPriceX96, liquidity);
 
         return (burnable0 + earnable0, burnable1 + earnable1);
     }
 
     /// @dev Wrapper around `IUniswapV3Pool.positions()`.
-    function info(Position memory position)
+    function info(Position memory position, IUniswapV3Pool pool)
         internal
         view
         returns (
@@ -81,7 +81,7 @@ library Uniswap {
             uint128 // tokensOwed1
         )
     {
-        return position.pool.positions(keccak256(abi.encodePacked(address(this), position.lower, position.upper)));
+        return pool.positions(keccak256(abi.encodePacked(address(this), position.lower, position.upper)));
     }
 
     /// @dev Wrapper around `LiquidityAmounts.getAmountsForLiquidity()`.

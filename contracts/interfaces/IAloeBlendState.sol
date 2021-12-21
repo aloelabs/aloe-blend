@@ -15,8 +15,8 @@ interface IAloeBlendState {
         external
         view
         returns (
-            IUniswapV3Pool pool,
             int24 lower,
-            int24 upper
+            int24 upper,
+            uint128 liquidity
         );
 }

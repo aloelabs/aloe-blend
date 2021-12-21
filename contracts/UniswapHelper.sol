@@ -24,9 +24,9 @@ contract UniswapHelper is IUniswapV3MintCallback {
 
     constructor(IUniswapV3Pool uniPool) {
         UNI_POOL = uniPool;
-        TICK_SPACING = uniPool.tickSpacing();
         TOKEN0 = IERC20(uniPool.token0());
         TOKEN1 = IERC20(uniPool.token1());
+        TICK_SPACING = uniPool.tickSpacing();
     }
 
     /// @dev Callback for Uniswap V3 pool.
