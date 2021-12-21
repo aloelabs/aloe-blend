@@ -34,11 +34,52 @@ contract AloeBlendFake is AloeBlend {
     }
 }
 
+contract VolatilityOracleFake is IVolatilityOracle {
+    function cachedPoolMetadata(address)
+        external
+        pure
+        returns (
+            uint32,
+            uint24,
+            uint24,
+            int24
+        )
+    {
+        return (1 hours, 0, 0, 0);
+    }
+
+    function estimate24H(
+        IUniswapV3Pool,
+        uint160,
+        int24
+    ) external pure returns (uint256 IV) {
+        return 2e18;
+    }
+}
+
+contract FactoryFake {
+    IVolatilityOracle public immutable VOLATILITY_ORACLE;
+
+    constructor(IVolatilityOracle _volatilityOracle) {
+        VOLATILITY_ORACLE = _volatilityOracle;
+    }
+
+    function create(
+        IUniswapV3Pool _uniPool,
+        ISilo _silo0,
+        ISilo _silo1
+    ) external returns (AloeBlendFake) {
+        return new AloeBlendFake(_uniPool, _silo0, _silo1);
+    }
+}
+
 contract AloeBlendTest is DSTest {
     AloeBlendFake blend;
 
     function setUp() public {
-        blend = new AloeBlendFake(
+        IVolatilityOracle oracle = new VolatilityOracleFake();
+        FactoryFake factory = new FactoryFake(oracle);
+        blend = factory.create(
             IUniswapV3Pool(0xF1B63cD9d80f922514c04b0fD0a30373316dd75b),
             ISilo(0x8E35ec3f2C8e14bf7A0E67eA6667F6965938aD2d),
             ISilo(0x908f6DF3df3c25365172F350670d055541Ec362E)
@@ -77,7 +118,7 @@ contract AloeBlendTest is DSTest {
 
         assertLt(amount0, inventory0);
         assertLt(amount1, inventory1);
-        assertLt(magic, 2 ** 96);
+        assertLt(magic, 2**96);
     }
 
     function test_spec_computeAmountsForPrimary() public {

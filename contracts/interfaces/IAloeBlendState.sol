@@ -16,7 +16,15 @@ interface IAloeBlendState {
         view
         returns (
             int24 lower,
-            int24 upper,
-            uint128 liquidity
+            int24 upper
+        );
+
+    /// @dev The Uniswap position used to rebalance when the vault deviates too far from 50/50
+    function limit()
+        external
+        view
+        returns (
+            int24 lower,
+            int24 upper
         );
 }

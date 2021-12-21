@@ -13,8 +13,6 @@ library Uniswap {
         int24 lower;
         // Upper tick of the position
         int24 upper;
-        // Liquidity in the position
-        uint128 liquidity;
     }
 
     /// @dev Do zero-burns to poke the Uniswap pools so earned fees are updated
@@ -25,13 +23,21 @@ library Uniswap {
     }
 
     /// @dev Deposits liquidity in a range on the Uniswap pool.
-    function deposit(Position memory position, IUniswapV3Pool pool, uint128 liquidity) internal {
+    function deposit(
+        Position memory position,
+        IUniswapV3Pool pool,
+        uint128 liquidity
+    ) internal {
         if (liquidity == 0) return;
         pool.mint(address(this), position.lower, position.upper, liquidity, "");
     }
 
     /// @dev Withdraws liquidity and collects all fees
-    function withdraw(Position memory position, IUniswapV3Pool pool, uint128 liquidity)
+    function withdraw(
+        Position memory position,
+        IUniswapV3Pool pool,
+        uint128 liquidity
+    )
         internal
         returns (
             uint256 burned0,
@@ -61,9 +67,12 @@ library Uniswap {
      * @notice Amounts of TOKEN0 and TOKEN1 held in vault's position. Includes
      * owed fees, except those accrued since last poke.
      */
-    function collectableAmountsAsOfLastPoke(Position memory position, IUniswapV3Pool pool) internal view returns (uint256, uint256) {
+    function collectableAmountsAsOfLastPoke(
+        Position memory position,
+        IUniswapV3Pool pool,
+        uint160 sqrtPriceX96
+    ) internal view returns (uint256, uint256) {
         (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position, pool);
-        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
         (uint256 burnable0, uint256 burnable1) = amountsForLiquidity(position, sqrtPriceX96, liquidity);
 
         return (burnable0 + earnable0, burnable1 + earnable1);
