@@ -10,7 +10,7 @@ interface IAloeBlendEvents {
         int24 lower,
         int24 upper,
         uint96 magic,
-        uint16 urgency,
+        uint32 urgency,
         uint256 shares,
         uint256 inventory0,
         uint256 inventory1

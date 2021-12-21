@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
-contract UniswapMinter is IUniswapV3MintCallback {
+contract UniswapHelper is IUniswapV3MintCallback {
     using SafeERC20 for IERC20;
 
     IUniswapV3Pool public immutable UNI_POOL;

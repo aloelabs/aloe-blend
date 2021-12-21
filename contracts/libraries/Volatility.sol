@@ -35,7 +35,7 @@ library Volatility {
         uint128 tickLiquidity;
     }
 
-    struct Storage {
+    struct FeeGrowthGlobals {
         // the fee growth as a Q128.128 fees of token0 collected per unit of liquidity for the entire life of the pool
         uint256 feeGrowthGlobal0X128;
         // the fee growth as a Q128.128 fees of token1 collected per unit of liquidity for the entire life of the pool
@@ -50,13 +50,13 @@ library Volatility {
      * @param data A summary of the pool's state from `pool.slot0` `pool.observe` and `pool.liquidity`
      * @param a The pool's cumulative feeGrowthGlobals some time in the past
      * @param b The pool's cumulative feeGrowthGlobals as of the current block
-     * @return An estimate of the implied volatility scaled by 1e18
+     * @return An estimate of the 24 hour implied volatility scaled by 1e18
      */
-    function estimateDailyIV(
+    function estimate24H(
         PoolMetadata memory metadata,
         PoolData memory data,
-        Storage memory a,
-        Storage memory b
+        FeeGrowthGlobals memory a,
+        FeeGrowthGlobals memory b
     ) internal pure returns (uint256) {
         uint256 volumeGamma0Gamma1;
         {

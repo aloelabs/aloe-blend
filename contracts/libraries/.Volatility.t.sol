@@ -6,13 +6,13 @@ import "ds-test/test.sol";
 import "./Volatility.sol";
 
 contract VolatilityFake {
-    function estimateDailyIV(
+    function estimate24H(
         Volatility.PoolMetadata memory metadata,
         Volatility.PoolData memory data,
-        Volatility.Storage memory a,
-        Volatility.Storage memory b
+        Volatility.FeeGrowthGlobals memory a,
+        Volatility.FeeGrowthGlobals memory b
     ) external pure returns (uint256) {
-        return Volatility.estimateDailyIV(metadata, data, a, b);
+        return Volatility.estimate24H(metadata, data, a, b);
     }
 }
 
@@ -33,11 +33,11 @@ contract VolatilityTest is DSTest {
             3600, // _oracleLookback
             19685271204911047580 // poolLiquidity
         );
-        uint256 dailyIV = volatility.estimateDailyIV(
+        uint256 dailyIV = volatility.estimate24H(
             metadata,
             data,
-            Volatility.Storage(1501955347902231987349614320458936, 527278396421895291380335427321388844898052, 0),
-            Volatility.Storage(1501968291161650295867029090958139, 527315901327546020416261134123578344760082, 8640)
+            Volatility.FeeGrowthGlobals(1501955347902231987349614320458936, 527278396421895291380335427321388844898052, 0),
+            Volatility.FeeGrowthGlobals(1501968291161650295867029090958139, 527315901327546020416261134123578344760082, 8640)
         );
 
         assertEq(dailyIV, 20405953567249984); // 2.041%
