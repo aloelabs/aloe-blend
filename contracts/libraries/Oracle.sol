@@ -48,7 +48,7 @@ library Oracle {
      * @dev (, , uint16 observationIndex, uint16 observationCardinality, , , ) = pool.slot0();
      * @return secondsAgo The number of seconds ago that the oldest observation was stored
      */
-    function getOldestObservation(
+    function getMaxSecondsAgo(
         IUniswapV3Pool pool,
         uint16 observationIndex,
         uint16 observationCardinality

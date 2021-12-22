@@ -8,7 +8,7 @@ interface IVolatilityOracle {
         external
         view
         returns (
-            uint32 oldestObservation,
+            uint32 maxSecondsAgo,
             uint24 gamma0,
             uint24 gamma1,
             int24 tickSpacing

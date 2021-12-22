@@ -5,6 +5,7 @@ export DAPP_SOLC_VERSION=0.8.10
 export DAPP_BUILD_OPTIMIZE=1
 export DAPP_BUILD_OPTIMIZE_RUNS=800
 export DAPP_TEST_VERBOSITY=1
+export DAPP_TEST_DEPTH=5
 
 line=$(grep -E 'PROVIDER_ALCHEMY_KEY' .env)
 line=(${line//=/ })

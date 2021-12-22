@@ -121,8 +121,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         silo1 = _silo1;
         recenterTimestamp = block.timestamp;
 
-        (uint32 oldestObservation, , , ) = volatilityOracle.cachedPoolMetadata(address(_uniPool));
-        require(oldestObservation >= 1 hours, "Aloe: oracle");
+        (uint32 maxSecondsAgo, , , ) = volatilityOracle.cachedPoolMetadata(address(_uniPool));
+        require(maxSecondsAgo >= 1 hours, "Aloe: oracle");
     }
 
     /// @inheritdoc IAloeBlendDerivedState
