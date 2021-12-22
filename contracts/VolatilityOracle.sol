@@ -4,7 +4,9 @@ pragma solidity ^0.8.10;
 import "./libraries/Oracle.sol";
 import "./libraries/Volatility.sol";
 
-contract VolatilityOracle {
+import "./interfaces/IVolatilityOracle.sol";
+
+contract VolatilityOracle is IVolatilityOracle {
     mapping(address => Volatility.PoolMetadata) public cachedPoolMetadata;
 
     mapping(address => Volatility.FeeGrowthGlobals[26]) public feeGrowthGlobals;
@@ -93,7 +95,7 @@ contract VolatilityOracle {
         uint8 readIndex = feeGrowthGlobalsReadIndex[address(pool)];
         uint32 timingError = _timingError(block.timestamp - feeGrowthGlobal[readIndex].timestamp);
 
-        for (uint8 counter = readIndex + 1; counter < readIndex + 25; counter++) {
+        for (uint8 counter = readIndex + 1; counter < readIndex + 26; counter++) {
             uint8 newReadIndex = counter % 26;
             uint32 newTimingError = _timingError(block.timestamp - feeGrowthGlobal[newReadIndex].timestamp);
 
