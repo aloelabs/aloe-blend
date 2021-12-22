@@ -9,7 +9,6 @@ import "./libraries/FullMath.sol";
 import "./libraries/TickMath.sol";
 import "./libraries/Silo.sol";
 import "./libraries/Uniswap.sol";
-import "./libraries/Volatility.sol";
 
 import "./interfaces/IAloeBlend.sol";
 import "./interfaces/IFactory.sol";
@@ -48,19 +47,19 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     using Silo for ISilo;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant MIN_WIDTH = 201; // 1% of inventory in primary ✅
+    uint24 public constant MIN_WIDTH = 201; // 1% of inventory in primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant MAX_WIDTH = 13864; // 50% of inventory in primary ✅
+    uint24 public constant MAX_WIDTH = 13864; // 50% of inventory in primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
     uint8 public constant K = 10;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant B = 2; // primary position should cover 95% of trading activity ✅
+    uint8 public constant B = 2; // primary Uniswap position should cover 95% of trading activity
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant MAINTENANCE_FEE = 10; // 10 --> 1/10th of earnings from primary Uniswap position ✅
+    uint8 public constant MAINTENANCE_FEE = 10; // 10 --> 1/10th of earnings from primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
     IVolatilityOracle public immutable volatilityOracle;
@@ -77,6 +76,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     /// @inheritdoc IAloeBlendState
     Uniswap.Position public limit;
 
+    /// @inheritdoc IAloeBlendState
     uint256 public recenterTimestamp;
 
     /// @inheritdoc IAloeBlendState
@@ -85,9 +85,15 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     /// @inheritdoc IAloeBlendState
     uint256 public maintenanceBudget1;
 
-    uint256 public avgRebalanceCost0;
+    uint224[10] public rewardPerGas0Array;
 
-    uint256 public avgRebalanceCost1;
+    uint224[10] public rewardPerGas1Array;
+
+    uint224 public rewardPerGas0Accumulator;
+
+    uint224 public rewardPerGas1Accumulator;
+
+    uint64 public rebalanceCount;
 
     /// @dev Required for some silos
     receive() external payable {}
@@ -246,7 +252,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     }
 
     /// @inheritdoc IAloeBlendActions
-    function rebalance(address rewardToken) external nonReentrant {
+    function rebalance(uint8 rewardToken) external nonReentrant {
+        uint32 gasStart = uint32(gasleft());
         RebalanceCache memory cache;
 
         // Get current tick & price
@@ -254,33 +261,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         cache.priceX96 = uint224(FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, Q96));
         // Get rebalance urgency (based on time elapsed since previous rebalance)
         cache.urgency = getRebalanceUrgency();
-
-        // Poke primary position and withdraw fees so that maintenance budget can grow
-        {
-            (, , uint256 earned0, uint256 earned1) = primary.withdraw(UNI_POOL, 0);
-            _earmarkSomeForMaintenance(earned0, earned1);
-        }
-
-        // Reward caller
-        {
-            if (rewardToken == address(TOKEN0)) {
-                uint256 rebalanceIncentive = FullMath.mulDiv(cache.urgency, avgRebalanceCost0, 10_000);
-                if (avgRebalanceCost0 == 0 || rebalanceIncentive > maintenanceBudget0)
-                    rebalanceIncentive = maintenanceBudget0;
-                TOKEN0.safeTransfer(msg.sender, rebalanceIncentive);
-                maintenanceBudget0 -= rebalanceIncentive;
-                avgRebalanceCost0 = rebalanceIncentive;
-                if (maintenanceBudget0 > K * avgRebalanceCost0) maintenanceBudget0 = K * avgRebalanceCost0;
-            } else {
-                uint256 rebalanceIncentive = FullMath.mulDiv(cache.urgency, avgRebalanceCost1, 10_000);
-                if (avgRebalanceCost1 == 0 || rebalanceIncentive > maintenanceBudget1)
-                    rebalanceIncentive = maintenanceBudget1;
-                TOKEN1.safeTransfer(msg.sender, rebalanceIncentive);
-                maintenanceBudget1 -= rebalanceIncentive;
-                avgRebalanceCost1 = rebalanceIncentive;
-                if (maintenanceBudget1 > K * avgRebalanceCost1) maintenanceBudget1 = K * avgRebalanceCost1;
-            }
-        }
 
         Uniswap.Position memory _limit = limit;
         (uint128 liquidity, , , , ) = _limit.info(UNI_POOL);
@@ -332,6 +312,47 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
             recenter(cache, inventory0, inventory1);
         }
 
+        // Poke primary position and withdraw fees so that maintenance budget can grow
+        {
+            (, , uint256 earned0, uint256 earned1) = primary.withdraw(UNI_POOL, 0);
+            _earmarkSomeForMaintenance(earned0, earned1);
+        }
+
+        // Reward caller
+        {
+            uint32 gasUsed = uint32(21000 + gasStart - gasleft());
+            if (rewardToken == 0) {
+                // computations
+                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas0Accumulator, cache.urgency, 10_000));
+                uint256 rebalanceIncentive = gasUsed * rewardPerGas;
+                // constraints
+                if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget0)
+                    rebalanceIncentive = maintenanceBudget0;
+                // payout
+                TOKEN0.safeTransfer(msg.sender, rebalanceIncentive);
+                // accounting
+                pushRewardPerGas0(rewardPerGas);
+                maintenanceBudget0 -= rebalanceIncentive;
+                if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
+                    maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
+            } else {
+                // computations
+                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas1Accumulator, cache.urgency, 10_000));
+                uint256 rebalanceIncentive = gasUsed * rewardPerGas;
+                // constraints
+                if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget1)
+                    rebalanceIncentive = maintenanceBudget1;
+                // payout
+                TOKEN1.safeTransfer(msg.sender, rebalanceIncentive);
+                // accounting
+                pushRewardPerGas1(rewardPerGas);
+                maintenanceBudget1 -= rebalanceIncentive;
+                if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
+                    maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
+            }
+        }
+
+        rebalanceCount++;
         emit Rebalance(cache.urgency, ratio, totalSupply, inventory0, inventory1);
     }
 
@@ -528,6 +549,28 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         }
 
         return (earned0, earned1);
+    }
+
+    function pushRewardPerGas0(uint224 rewardPerGas0) private {
+        unchecked {
+            rewardPerGas0 /= 10;
+            rewardPerGas0Accumulator =
+                rewardPerGas0Accumulator +
+                rewardPerGas0 -
+                rewardPerGas0Array[rebalanceCount % 10];
+            rewardPerGas0Array[rebalanceCount % 10] = rewardPerGas0;
+        }
+    }
+
+    function pushRewardPerGas1(uint224 rewardPerGas1) private {
+        unchecked {
+            rewardPerGas1 /= 10;
+            rewardPerGas1Accumulator =
+                rewardPerGas1Accumulator +
+                rewardPerGas1 -
+                rewardPerGas1Array[rebalanceCount % 10];
+            rewardPerGas1Array[rebalanceCount % 10] = rewardPerGas1;
+        }
     }
 
     function _balance0() private view returns (uint256) {

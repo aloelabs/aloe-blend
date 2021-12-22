@@ -85,10 +85,14 @@ contract VolatilityOracle {
         );
     }
 
-    function _pickReadIndex(IUniswapV3Pool pool, Volatility.FeeGrowthGlobals[26] memory feeGrowthGlobal) private view returns (uint8) {
+    function _pickReadIndex(IUniswapV3Pool pool, Volatility.FeeGrowthGlobals[26] memory feeGrowthGlobal)
+        private
+        view
+        returns (uint8)
+    {
         uint8 readIndex = feeGrowthGlobalsReadIndex[address(pool)];
         uint32 timingError = _timingError(block.timestamp - feeGrowthGlobal[readIndex].timestamp);
-        
+
         for (uint8 counter = readIndex + 1; counter < readIndex + 25; counter++) {
             uint8 newReadIndex = counter % 26;
             uint32 newTimingError = _timingError(block.timestamp - feeGrowthGlobal[newReadIndex].timestamp);

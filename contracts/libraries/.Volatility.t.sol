@@ -36,8 +36,16 @@ contract VolatilityTest is DSTest {
         uint256 dailyIV = volatility.estimate24H(
             metadata,
             data,
-            Volatility.FeeGrowthGlobals(1501955347902231987349614320458936, 527278396421895291380335427321388844898052, 0),
-            Volatility.FeeGrowthGlobals(1501968291161650295867029090958139, 527315901327546020416261134123578344760082, 8640)
+            Volatility.FeeGrowthGlobals(
+                1501955347902231987349614320458936,
+                527278396421895291380335427321388844898052,
+                0
+            ),
+            Volatility.FeeGrowthGlobals(
+                1501968291161650295867029090958139,
+                527315901327546020416261134123578344760082,
+                8640
+            )
         );
 
         assertEq(dailyIV, 20405953567249984); // 2.041%
