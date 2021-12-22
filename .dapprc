@@ -5,3 +5,8 @@ export DAPP_SOLC_VERSION=0.8.10
 export DAPP_BUILD_OPTIMIZE=1
 export DAPP_BUILD_OPTIMIZE_RUNS=800
 export DAPP_TEST_VERBOSITY=1
+
+line=$(grep -E 'PROVIDER_ALCHEMY_KEY' .env)
+line=(${line//=/ })
+key=${line[1]}
+export ETH_RPC_URL='https://eth-mainnet.alchemyapi.io/v2/'$key

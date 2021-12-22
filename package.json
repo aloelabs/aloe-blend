@@ -38,7 +38,9 @@
   "scripts": {
     "prettier": "prettier --write 'contracts/**/*.sol'",
     "solhint": "solhint 'contracts/**/*.sol' --fix",
-    "compile": "hardhat compile",
-    "test": "hardhat test"
+    "build-hh": "hardhat compile",
+    "build-dapp": "dapp build",
+    "test-hh": "hardhat test",
+    "test-dapp": "DAPP_LINK_TEST_LIBRARIES=0 dapp test --rpc --rpc-block 13806816"
   }
 }

@@ -21,7 +21,6 @@ interface ICToken {
 }
 
 contract CompoundCTokenSilo is ISilo {
-
     string public override name;
 
     address public immutable cToken;
