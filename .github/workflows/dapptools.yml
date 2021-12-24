@@ -1,0 +1,25 @@
+name: dapptools
+
+on:
+  pull_request:
+    branches:
+    - master
+    
+  schedule:
+  - cron: "0 0 * * *"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Nix
+      run: curl -L https://nixos.org/nix/install | sh
+    - name: Install dapptools
+      run: |
+        . $HOME/.nix-profile/etc/profile.d/nix.sh
+        curl https://dapp.tools/install | sh
+    - name: Test
+      run: |
+        echo "${{ env.ETH_RPC_URL }}"
+        ETH_RPC_URL="${{ env.ETH_RPC_URL }}" DAPP_LINK_TEST_LIBRARIES=0 dapp test --rpc --rpc-block 13806816

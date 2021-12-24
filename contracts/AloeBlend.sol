@@ -53,13 +53,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     uint24 public constant MAX_WIDTH = 13864; // 50% of inventory in primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant K = 10;
+    uint8 public constant K = 10; // maintenance budget should cover at least 10 rebalances
 
     /// @inheritdoc IAloeBlendImmutables
     uint8 public constant B = 2; // primary Uniswap position should cover 95% of trading activity
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant MAINTENANCE_FEE = 10; // 10 --> 1/10th of earnings from primary Uniswap position
+    uint8 public constant MAINTENANCE_FEE = 10; // 1/10th of earnings from primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
     IVolatilityOracle public immutable volatilityOracle;
@@ -89,9 +89,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
 
     uint224[10] public rewardPerGas1Array;
 
-    uint224 public rewardPerGas0Accumulator;
+    uint224 public rewardPerGas0Average;
 
-    uint224 public rewardPerGas1Accumulator;
+    uint224 public rewardPerGas1Average;
 
     uint64 public rebalanceCount;
 
@@ -119,7 +119,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         volatilityOracle = IFactory(msg.sender).VOLATILITY_ORACLE();
         silo0 = _silo0;
         silo1 = _silo1;
-        recenterTimestamp = block.timestamp;
 
         (uint32 maxSecondsAgo, , , ) = volatilityOracle.cachedPoolMetadata(address(_uniPool));
         require(maxSecondsAgo >= 1 hours, "Aloe: oracle");
@@ -323,7 +322,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
             uint32 gasUsed = uint32(21000 + gasStart - gasleft());
             if (rewardToken == 0) {
                 // computations
-                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas0Accumulator, cache.urgency, 10_000));
+                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas0Average, cache.urgency, 10_000));
                 uint256 rebalanceIncentive = gasUsed * rewardPerGas;
                 // constraints
                 if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget0)
@@ -337,7 +336,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
                     maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
             } else {
                 // computations
-                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas1Accumulator, cache.urgency, 10_000));
+                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas1Average, cache.urgency, 10_000));
                 uint256 rebalanceIncentive = gasUsed * rewardPerGas;
                 // constraints
                 if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget1)
@@ -554,8 +553,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     function pushRewardPerGas0(uint224 rewardPerGas0) private {
         unchecked {
             rewardPerGas0 /= 10;
-            rewardPerGas0Accumulator =
-                rewardPerGas0Accumulator +
+            rewardPerGas0Average =
+                rewardPerGas0Average +
                 rewardPerGas0 -
                 rewardPerGas0Array[rebalanceCount % 10];
             rewardPerGas0Array[rebalanceCount % 10] = rewardPerGas0;
@@ -565,8 +564,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     function pushRewardPerGas1(uint224 rewardPerGas1) private {
         unchecked {
             rewardPerGas1 /= 10;
-            rewardPerGas1Accumulator =
-                rewardPerGas1Accumulator +
+            rewardPerGas1Average =
+                rewardPerGas1Average +
                 rewardPerGas1 -
                 rewardPerGas1Array[rebalanceCount % 10];
             rewardPerGas1Array[rebalanceCount % 10] = rewardPerGas1;

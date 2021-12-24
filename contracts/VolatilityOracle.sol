@@ -6,9 +6,33 @@ import "./libraries/Volatility.sol";
 
 import "./interfaces/IVolatilityOracle.sol";
 
+/*
+                              #                                                                    
+                             ###                                                                   
+                             #####                                                                 
+          #                 #######                                *###*                           
+           ###             #########                         ########                              
+           #####         ###########                   ###########                                 
+           ########    ############               ############                                     
+            ########    ###########         *##############                                        
+           ###########   ########      #################                                           
+           ############   ###      #################                                               
+           ############       ##################                                                   
+          #############    #################*         *#############*                              
+         ##############    #############      #####################################                
+        ###############   ####******      #######################*                                 
+      ################                                                                             
+    #################   *############################*                                             
+      ##############    ######################################                                     
+          ########    ################*                     **######*                              
+              ###    ###                                                                           
+*/
+
 contract VolatilityOracle is IVolatilityOracle {
+    /// @inheritdoc IVolatilityOracle
     mapping(address => Volatility.PoolMetadata) public cachedPoolMetadata;
 
+    /// @inheritdoc IVolatilityOracle
     mapping(address => Volatility.FeeGrowthGlobals[25]) public feeGrowthGlobals;
 
     mapping(address => uint8) public feeGrowthGlobalsReadIndex;
@@ -32,6 +56,7 @@ contract VolatilityOracle is IVolatilityOracle {
         cachedPoolMetadata[address(pool)] = poolMetadata;
     }
 
+    /// @inheritdoc IVolatilityOracle
     function estimate24H(
         IUniswapV3Pool pool,
         uint160 sqrtPriceX96,
