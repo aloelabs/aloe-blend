@@ -15,11 +15,10 @@ jobs:
     steps:
     - name: Install Nix
       run: curl -L https://nixos.org/nix/install | sh
-    - name: Install dapptools
+    - name: Install and run dapptools
+      env:
+        ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
       run: |
         . $HOME/.nix-profile/etc/profile.d/nix.sh
         curl https://dapp.tools/install | sh
-    - name: Test
-      run: |
-        echo "${{ env.ETH_RPC_URL }}"
-        ETH_RPC_URL="${{ env.ETH_RPC_URL }}" DAPP_LINK_TEST_LIBRARIES=0 dapp test --rpc --rpc-block 13806816
+        DAPP_LINK_TEST_LIBRARIES=0 dapp test --rpc --rpc-block 13806816
