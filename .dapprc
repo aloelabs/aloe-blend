@@ -7,7 +7,9 @@ export DAPP_BUILD_OPTIMIZE_RUNS=800
 export DAPP_TEST_VERBOSITY=1
 export DAPP_TEST_DEPTH=5
 
-line=$(grep -E 'PROVIDER_ALCHEMY_KEY' .env)
-line=(${line//=/ })
-key=${line[1]}
-export ETH_RPC_URL='https://eth-mainnet.alchemyapi.io/v2/'$key
+if [ "$CI" != "true" ]; then
+  line=$(grep -E 'PROVIDER_ALCHEMY_KEY' .env)
+  line=(${line//=/ })
+  key=${line[1]}
+  export ETH_RPC_URL='https://eth-mainnet.alchemyapi.io/v2/'$key
+fi

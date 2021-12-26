@@ -1,9 +1,5 @@
-# This is a basic workflow that is manually triggered
-
 name: dapptools
 
-# Controls when the action will run. Workflow runs when manually triggered using the UI
-# or API.
 on:
   pull_request:
     branches:
@@ -12,21 +8,17 @@ on:
   schedule:
   - cron: "0 0 * * *"
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "greet"
   test:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    # Runs a single command using the runners shell
     - name: Install Nix
+      run: curl -L https://nixos.org/nix/install | sh
+    - name: Install and run dapptools
+      env:
+        ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
       run: |
-        curl -L https://nixos.org/nix/install | sh
-        . "$HOME/.nix-profile/etc/profile.d/nix.sh"
-    - name: Install dapptools
-      run: curl https://dapp.tools/install | sh
-    - name: Test contracts
-      run: DAPP_LINK_TEST_LIBRARIES=0 dapp test --rpc --rpc-block 13806816
+        . $HOME/.nix-profile/etc/profile.d/nix.sh
+        curl https://dapp.tools/install | sh
+        DAPP_LINK_TEST_LIBRARIES=0 dapp test --rpc --rpc-block 13806816
