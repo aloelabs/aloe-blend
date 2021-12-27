@@ -22,24 +22,24 @@ contract UniswapHelper is IUniswapV3MintCallback {
 
     uint256 internal lastMintedAmount1;
 
-    constructor(IUniswapV3Pool uniPool) {
-        UNI_POOL = uniPool;
-        TOKEN0 = IERC20(uniPool.token0());
-        TOKEN1 = IERC20(uniPool.token1());
-        TICK_SPACING = uniPool.tickSpacing();
+    constructor(IUniswapV3Pool _pool) {
+        UNI_POOL = _pool;
+        TOKEN0 = IERC20(_pool.token0());
+        TOKEN1 = IERC20(_pool.token1());
+        TICK_SPACING = _pool.tickSpacing();
     }
 
     /// @dev Callback for Uniswap V3 pool.
     function uniswapV3MintCallback(
-        uint256 amount0,
-        uint256 amount1,
+        uint256 _amount0,
+        uint256 _amount1,
         bytes calldata
     ) external {
         require(msg.sender == address(UNI_POOL));
-        if (amount0 != 0) TOKEN0.safeTransfer(msg.sender, amount0);
-        if (amount1 != 0) TOKEN1.safeTransfer(msg.sender, amount1);
+        if (_amount0 != 0) TOKEN0.safeTransfer(msg.sender, _amount0);
+        if (_amount1 != 0) TOKEN1.safeTransfer(msg.sender, _amount1);
 
-        lastMintedAmount0 = amount0;
-        lastMintedAmount1 = amount1;
+        lastMintedAmount0 = _amount0;
+        lastMintedAmount1 = _amount1;
     }
 }

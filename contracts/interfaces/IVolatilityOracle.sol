@@ -39,6 +39,36 @@ interface IVolatilityOracle {
         uint32 timestamp
     );
 
+    /**
+     * @notice Returns the index that was closest to 24 hours old last time
+     * `estimate24H` was called
+     * @param pool The Uniswap pool for which read index should be fetched
+     * @return An index into `feeGrowthGlobals`
+     */
+    function feeGrowthGlobalsReadIndex(address pool) external view returns (uint8);
+
+    /**
+     * @notice Returns the index that was written to last time `estimate24H` was called
+     * @param pool The Uniswap pool for which write index should be fetched
+     * @return An index into `feeGrowthGlobals`
+     */
+    function feeGrowthGlobalsWriteIndex(address pool) external view returns (uint8);
+
+    /**
+     * @notice Updates cached metadata for a Uniswap pool. Must be called at least once
+     * in order for volatility to be determined. Should also be called whenever
+     * protocol fee changes
+     * @param pool The Uniswap pool to poke
+     */
+    function cacheMetadataFor(IUniswapV3Pool pool) external;
+
+    /**
+     * @notice Estimates 24-hour implied volatility for a Uniswap pool.
+     * @param pool The pool to use for volatility estimate
+     * @param sqrtPriceX96 The pool's current sqrtRatio, from pool.slot0()
+     * @param tick The pool's current tick, from pool.slot0()
+     * @return IV The estimated volatility, scaled by 1e18
+     */
     function estimate24H(
         IUniswapV3Pool pool,
         uint160 sqrtPriceX96,

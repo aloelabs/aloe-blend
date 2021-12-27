@@ -35,10 +35,13 @@ contract VolatilityOracle is IVolatilityOracle {
     /// @inheritdoc IVolatilityOracle
     mapping(address => Volatility.FeeGrowthGlobals[25]) public feeGrowthGlobals;
 
+    /// @inheritdoc IVolatilityOracle
     mapping(address => uint8) public feeGrowthGlobalsReadIndex;
 
+    /// @inheritdoc IVolatilityOracle
     mapping(address => uint8) public feeGrowthGlobalsWriteIndex;
 
+    /// @inheritdoc IVolatilityOracle
     function cacheMetadataFor(IUniswapV3Pool pool) external {
         Volatility.PoolMetadata memory poolMetadata;
 

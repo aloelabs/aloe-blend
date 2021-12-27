@@ -16,7 +16,7 @@ contract AloeBlendFake is AloeBlend {
         width = _computeNextPositionWidth(IV);
     }
 
-    function computeAmountsForPrimary(
+    function computeMagicAmounts(
         uint256 inventory0,
         uint256 inventory1,
         uint224 priceX96,
@@ -25,16 +25,35 @@ contract AloeBlendFake is AloeBlend {
         external
         pure
         returns (
+            uint96,
             uint256,
-            uint256,
-            uint96
+            uint256
         )
     {
-        return _computeAmountsForPrimary(inventory0, inventory1, priceX96, halfWidth);
+        return _computeMagicAmounts(inventory0, inventory1, priceX96, halfWidth);
+    }
+
+    function computeLPShares(
+        uint256 _totalSupply,
+        uint256 _inventory0,
+        uint256 _inventory1,
+        uint256 _amount0Max,
+        uint256 _amount1Max,
+        uint160 _sqrtPriceX96
+    )
+        external
+        pure
+        returns (
+            uint256 shares,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        return _computeLPShares(_totalSupply, _inventory0, _inventory1, _amount0Max, _amount1Max, _sqrtPriceX96);
     }
 }
 
-contract VolatilityOracleFake is IVolatilityOracle {
+contract VolatilityOracleFake {
     function cachedPoolMetadata(address)
         external
         pure
@@ -77,7 +96,7 @@ contract AloeBlendTest is DSTest {
     AloeBlendFake blend;
 
     function setUp() public {
-        IVolatilityOracle oracle = new VolatilityOracleFake();
+        IVolatilityOracle oracle = IVolatilityOracle(address(new VolatilityOracleFake()));
         FactoryFake factory = new FactoryFake(oracle);
         blend = factory.create(
             IUniswapV3Pool(0xF1B63cD9d80f922514c04b0fD0a30373316dd75b),
@@ -100,7 +119,7 @@ contract AloeBlendTest is DSTest {
         assertEq(blend.computeNextPositionWidth(4e17), 13864);
     }
 
-    function test_computeAmountsForPrimary(
+    function test_computeMagicAmounts(
         uint128 inventory0,
         uint128 inventory1,
         uint224 priceX96,
@@ -109,7 +128,7 @@ contract AloeBlendTest is DSTest {
         if (halfWidth < blend.MIN_WIDTH() / 2) return;
         if (halfWidth > blend.MAX_WIDTH() / 2) return;
 
-        (uint256 amount0, uint256 amount1, uint96 magic) = blend.computeAmountsForPrimary(
+        (uint96 magic, uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(
             inventory0,
             inventory1,
             priceX96,
@@ -121,19 +140,82 @@ contract AloeBlendTest is DSTest {
         assertLt(magic, 2**96);
     }
 
-    function test_spec_computeAmountsForPrimary() public {
+    function test_spec_computeMagicAmounts() public {
         uint256 amount0;
         uint256 amount1;
         uint96 magic;
 
-        (amount0, amount1, magic) = blend.computeAmountsForPrimary(0, 0, 100000, blend.MIN_WIDTH());
+        (magic, amount0, amount1) = blend.computeMagicAmounts(0, 0, 100000, blend.MIN_WIDTH());
         assertEq(amount0, 0);
         assertEq(amount1, 0);
         assertEq(magic, 792215870747104703836069196);
 
-        (amount0, amount1, magic) = blend.computeAmountsForPrimary(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH());
+        (magic, amount0, amount1) = blend.computeMagicAmounts(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH());
         assertEq(amount0, 555565);
         assertEq(amount1, 1111130);
         assertEq(magic, 39614800711660855234216192339);
+    }
+
+    function test_computeLPShares(
+        uint128 _totalSupplyDiff,
+        uint256 _inventory0,
+        uint256 _inventory1,
+        uint256 _amount0Max,
+        uint256 _amount1Max,
+        uint160 _sqrtPriceX96
+    ) public {
+        if (_inventory0 > type(uint256).max - _inventory1) return;
+        if (_totalSupplyDiff > _inventory0 + _inventory1) return;
+
+        uint256 _totalSupply = _inventory0 + _inventory1 - _totalSupplyDiff;
+        if (_amount0Max > type(uint256).max / _totalSupply || _amount1Max > type(uint256).max / _totalSupply) return;
+
+        (uint256 shares, uint256 amount0, uint256 amount1) = blend.computeLPShares(
+            _totalSupply,
+            _inventory0,
+            _inventory1,
+            _amount0Max,
+            _amount1Max,
+            _sqrtPriceX96
+        );
+
+        assertLe(amount0, _amount0Max);
+        assertLe(amount1, _amount1Max);
+
+        if (
+            _inventory0 > type(uint256).max - amount0 ||
+            _inventory1 > type(uint256).max - amount1 ||
+            _totalSupply > type(uint256).max - shares
+        ) return;
+
+        uint256 reverse0 = FullMath.mulDiv(_inventory0 + amount0, shares, _totalSupply + shares);
+        uint256 reverse1 = FullMath.mulDiv(_inventory1 + amount1, shares, _totalSupply + shares);
+        assertLe(reverse0, amount0);
+        assertLe(reverse1, amount1);
+        if (amount0 > 100000) assertGe(reverse0, amount0 - 1);
+        if (amount1 > 100000) assertGe(reverse1, amount1 - 1);
+    }
+
+    function test_spec_computeLPShares() public {
+        uint256 shares;
+        uint256 amount0;
+        uint256 amount1;
+
+        (shares, amount0, amount1) = blend.computeLPShares(0, 0, 0, 10000000, 20000001, 1.120455419e29);
+        assertEq(shares, 10000000);
+        assertEq(amount0, 10000000);
+        assertEq(amount1, 19999999);
+        (shares, amount0, amount1) = blend.computeLPShares(0, 0, 0, 10000001, 20000000, 1.120455419e29);
+        assertEq(shares, 20000000);
+        assertEq(amount0, 10000000);
+        assertEq(amount1, 20000000);
+        (shares, amount0, amount1) = blend.computeLPShares(20000000, 10000000, 20000000, 20000000, 40000000, 1.120455419e29);
+        assertEq(shares, 40000000);
+        assertEq(amount0, 20000000);
+        assertEq(amount1, 40000000);
+        (shares, amount0, amount1) = blend.computeLPShares(60000000, 30000000, 60000000, 20000000, 40000000, 1.58456325e29);
+        assertEq(shares, 40000000);
+        assertEq(amount0, 20000000);
+        assertEq(amount1, 40000000);
     }
 }
