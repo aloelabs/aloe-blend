@@ -18,10 +18,6 @@ contract UniswapHelper is IUniswapV3MintCallback {
 
     int24 public immutable TICK_SPACING;
 
-    uint256 internal lastMintedAmount0;
-
-    uint256 internal lastMintedAmount1;
-
     constructor(IUniswapV3Pool _pool) {
         UNI_POOL = _pool;
         TOKEN0 = IERC20(_pool.token0());
@@ -38,8 +34,5 @@ contract UniswapHelper is IUniswapV3MintCallback {
         require(msg.sender == address(UNI_POOL));
         if (_amount0 != 0) TOKEN0.safeTransfer(msg.sender, _amount0);
         if (_amount1 != 0) TOKEN1.safeTransfer(msg.sender, _amount1);
-
-        lastMintedAmount0 = _amount0;
-        lastMintedAmount1 = _amount1;
     }
 }

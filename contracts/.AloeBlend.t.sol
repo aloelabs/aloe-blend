@@ -92,6 +92,8 @@ contract FactoryFake {
     }
 }
 
+// TODO test that primary.liquidity and limit.liquidity are equal to pool.info(...) number
+
 contract AloeBlendTest is DSTest {
     AloeBlendFake blend;
 
@@ -103,6 +105,10 @@ contract AloeBlendTest is DSTest {
             ISilo(0x8E35ec3f2C8e14bf7A0E67eA6667F6965938aD2d),
             ISilo(0x908f6DF3df3c25365172F350670d055541Ec362E)
         );
+    }
+
+    function test_spec_computeRebalanceUrgency() public {
+        // TODO
     }
 
     function test_computeNextPositionWidth(uint256 IV) public {
