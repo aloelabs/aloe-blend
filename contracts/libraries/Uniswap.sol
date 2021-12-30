@@ -15,13 +15,11 @@ library Uniswap {
         int24 lower;
         // Upper tick of the position
         int24 upper;
-        // Liquidity in the position
-        bool isActive;
     }
 
     /// @dev Do zero-burns to poke the Uniswap pools so earned fees are updated
     function poke(Position memory position) internal {
-        if (position.isActive) position.pool.burn(position.lower, position.upper, 0);
+        if (position.lower != position.upper) position.pool.burn(position.lower, position.upper, 0);
     }
 
     /// @dev Deposits liquidity in a range on the Uniswap pool.
@@ -29,41 +27,22 @@ library Uniswap {
         (amount0, amount1) = position.pool.mint(address(this), position.lower, position.upper, liquidity, "");
     }
 
-    /// @dev Withdraws fraction of liquidity but collects *all* earned fees
-    function withdraw(
-        Position memory position,
-        uint128 liquidity,
-        uint256 numerator,
-        uint256 denominator
-    )
+    /// @dev Withdraws all liquidity and collects all fees
+    function withdraw(Position memory position, uint128 liquidity)
         internal
         returns (
-            uint256, // burned0
-            uint256, // burned1
-            uint256, // earned0
-            uint256 // earned1
+            uint256 burned0,
+            uint256 burned1,
+            uint256 earned0,
+            uint256 earned1
         )
     {
-        assert(numerator <= denominator && denominator != 0);
-
-        uint256 burned0;
-        uint256 burned1;
-
-        if (numerator == denominator) {
-            // withdraw everything
+        if (liquidity != 0) {
             (burned0, burned1) = position.pool.burn(position.lower, position.upper, liquidity);
-        } else {
-            // withdraw fraction
-            (burned0, burned1) = position.pool.burn(
-                position.lower,
-                position.upper,
-                uint128(FullMath.mulDiv(liquidity, numerator, denominator))
-            );
         }
 
-        // Collect tokens derived from liquidity burn, plus *all* earned fees. Instead of defining
-        // collected0 & collected1, reuse numerator and denominator. This avoids stack too deep
-        (numerator, denominator) = position.pool.collect(
+        // Collect all owed tokens including earned fees
+        (uint256 collected0, uint256 collected1) = position.pool.collect(
             address(this),
             position.lower,
             position.upper,
@@ -72,7 +51,8 @@ library Uniswap {
         );
 
         unchecked {
-            return (burned0, burned1, numerator - burned0, denominator - burned1);
+            earned0 = collected0 - burned0;
+            earned1 = collected1 - burned1;
         }
     }
 
