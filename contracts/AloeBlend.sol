@@ -3,7 +3,6 @@ pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 
 import "./libraries/FullMath.sol";
 import "./libraries/TickMath.sol";
@@ -41,10 +40,12 @@ import "./UniswapHelper.sol";
 
 uint256 constant Q96 = 2**96;
 
-contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend {
+contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     using SafeERC20 for IERC20;
     using Uniswap for Uniswap.Position;
     using Silo for ISilo;
+
+    uint24 public constant RECENTERING_INTERVAL = 24 hours;
 
     /// @inheritdoc IAloeBlendImmutables
     uint24 public constant MIN_WIDTH = 201; // 1% of inventory in primary Uniswap position
@@ -77,6 +78,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         int24 limitUpper;
         uint64 rebalanceCount;
         uint48 recenterTimestamp;
+        bool locked;
     }
 
     /// @inheritdoc IAloeBlendState
@@ -129,7 +131,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         uint256 amount1Min
     )
         external
-        nonReentrant
         returns (
             uint256 shares,
             uint256 amount0,
@@ -137,9 +138,11 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         )
     {
         require(amount0Max != 0 || amount1Max != 0, "Aloe: 0 deposit");
+        // Reentrancy guard is embedded in `_loadPackedSlot` to save gas
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
+        packedSlot.locked = true;
 
         // Poke all assets
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = loadPackedSlot();
         primary.poke();
         limit.poke();
         silo0.delegate_poke();
@@ -166,14 +169,16 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         // Mint shares
         _mint(msg.sender, shares);
         emit Deposit(msg.sender, shares, amount0, amount1);
+        packedSlot.locked = false;
     }
 
     /// @inheritdoc IAloeBlendActions
+    // TODO add reentranct guard
     function withdraw(
         uint256 shares,
         uint256 amount0Min,
         uint256 amount1Min
-    ) external nonReentrant returns (uint256 amount0, uint256 amount1) {
+    ) external returns (uint256 amount0, uint256 amount1) {
         require(shares != 0, "Aloe: 0 shares");
         uint256 _totalSupply = totalSupply + 1;
         uint256 temp0;
@@ -214,23 +219,29 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         uint160 sqrtPriceX96;
         uint224 priceX96;
         int24 tick;
-        uint32 urgency;
     }
 
     /// @inheritdoc IAloeBlendActions
-    function rebalance(address rewardToken) external nonReentrant {
+    function rebalance(address rewardToken) external {
         uint32 gas = uint32(gasleft());
+        uint32 urgency = getRebalanceUrgency();
+        // Reentrancy guard is embedded in `_loadPackedSlot` to save gas
         (
             Uniswap.Position memory primary,
             Uniswap.Position memory limit,
             uint64 rebalanceCount,
             uint48 recenterTimestamp
-        ) = loadPackedSlot();
+        ) = _loadPackedSlot();
+        packedSlot.locked = true;
 
         // Populate rebalance cache
         RebalanceCache memory cache;
         (cache.sqrtPriceX96, cache.tick, , , , , ) = UNI_POOL.slot0();
         cache.priceX96 = uint224(FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, Q96));
+
+        // Poke silos to ensure reported balances are correct
+        silo0.delegate_poke();
+        silo1.delegate_poke();
 
         // Check inventory
         (uint256 inventory0, uint256 inventory1, InventoryDetails memory d) = _getInventory(
@@ -252,7 +263,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
             // Attempt to sell token1 for token0. Choose limit order bounds below the market price. Limit
             // order cannot be removed & replaced in the same spot; it must move.
             limit.upper = TickMath.floor(cache.tick, TICK_SPACING);
-            assert(d.limitLiquidity == 0 || limit.lower != limit.upper - TICK_SPACING);
+            require(d.limitLiquidity == 0 || limit.lower != limit.upper - TICK_SPACING);
             limit.lower = limit.upper - TICK_SPACING;
             // Choose amount1 such that ratio will be 50/50 once the limit order is pushed through (division by 2
             // is a good approximation for small tickSpacing). Also have to constrain to fluid1 since we're not
@@ -268,7 +279,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
             // Attempt to sell token1 for token0. Choose limit order bounds above the market price. Limit
             // order cannot be removed & replaced in the same spot; it must move.
             limit.lower = TickMath.ceil(cache.tick, TICK_SPACING);
-            assert(d.limitLiquidity == 0 || limit.upper != limit.lower + TICK_SPACING);
+            require(d.limitLiquidity == 0 || limit.upper != limit.lower + TICK_SPACING);
             limit.upper = limit.lower + TICK_SPACING;
             // Choose amount0 such that ratio will be 50/50 once the limit order is pushed through (division by 2
             // is a good approximation for small tickSpacing). Also have to constrain to fluid0 since we're not
@@ -284,89 +295,42 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
             // Zero-out the limit struct to indicate that it's inactive
             delete limit;
             // Recenter, but not more than once per hour
-            assert(block.timestamp - recenterTimestamp > 1 hours);
-            primary = recenter(cache, primary, d.primaryLiquidity, inventory0, inventory1);
+            require(block.timestamp - recenterTimestamp > 1 hours);
+            primary = _recenter(cache, primary, d.primaryLiquidity);
             recenterTimestamp = uint48(block.timestamp);
         }
 
-        // Grow the maintenance budget using portion of the silos' revenue
-        {
-            // TODO
-        }
-
-        // Reward caller
-        unchecked {
-            cache.urgency = getRebalanceUrgency();
-            gas = uint32(21000 + gas - gasleft());
-            uint256 rewardPerGas = rewardPerGasAverages[rewardToken];
-            uint256 reward = FullMath.mulDiv(rewardPerGas * gas, cache.urgency, 10_000);
-
-            if (rewardToken == address(TOKEN0)) {
-                // constraints
-                if (reward > maintenanceBudget0 || rewardPerGas == 0) reward = maintenanceBudget0;
-                // payout
-                TOKEN0.safeTransfer(msg.sender, reward);
-                maintenanceBudget0 -= reward;
-                // accounting
-                rewardPerGas = reward / gas;
-                if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
-                    maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
-            } else if (rewardToken == address(TOKEN1)) {
-                // constraints
-                if (reward > maintenanceBudget1 || rewardPerGas == 0) reward = maintenanceBudget1;
-                // payout
-                TOKEN1.safeTransfer(msg.sender, reward);
-                maintenanceBudget1 -= reward;
-                // accounting
-                rewardPerGas = reward / gas;
-                if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
-                    maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
-            } else {
-                // constraints
-                // reuse ratio variable to store balance and avoid "stack too deep"
-                ratio = IERC20(rewardToken).balanceOf(address(this));
-                if (reward > ratio || rewardPerGas == 0) reward = ratio;
-                // payout
-                IERC20(rewardToken).safeTransfer(msg.sender, reward);
-                // accounting
-                rewardPerGas = reward / gas;
-            }
-
-            pushRewardPerGas(rewardToken, rewardPerGas, rebalanceCount);
-        }
-
-        _storePackedSlot(primary, limit, rebalanceCount + 1, recenterTimestamp);
-        emit Rebalance(cache.urgency, ratio, totalSupply, inventory0, inventory1);
+        emit Rebalance(ratio, totalSupply, inventory0, inventory1);
+        _rewardCaller(rewardToken, rebalanceCount, urgency, gas);
+        _unlockAndStorePackedSlot(primary, limit, rebalanceCount + 1, recenterTimestamp);
     }
 
-    function recenter(
+    function _recenter(
         RebalanceCache memory cache,
         Uniswap.Position memory primary,
-        uint128 primaryLiquidity,
-        uint256 amount0, // inventory0
-        uint256 amount1 // inventory1
+        uint128 primaryLiquidity
     ) private returns (Uniswap.Position memory) {
-        uint24 w = _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, cache.sqrtPriceX96, cache.tick));
-
-        // Exit primary Uniswap position
         {
+            // Exit primary Uniswap position
             (, , uint256 earned0, uint256 earned1) = primary.withdraw(primaryLiquidity);
             _earmarkSomeForMaintenance(earned0, earned1);
         }
 
         // Compute amounts that should be placed in new Uniswap position
-        w = w >> 1;
-        (, amount0, amount1) = _computeMagicAmounts(amount0, amount1, cache.priceX96, w);
-
         uint256 balance0 = _balance0();
         uint256 balance1 = _balance1();
-        bool hasExcessToken0 = balance0 > amount0;
-        bool hasExcessToken1 = balance1 > amount1;
+        uint24 w = _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, cache.sqrtPriceX96, cache.tick));
+        w = w >> 1;
+        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(
+            silo0.balanceOf(address(this)) + balance0, // inventory0
+            silo1.balanceOf(address(this)) + balance1, // inventory1
+            cache.priceX96,
+            w
+        );
 
-        // Because of cToken exchangeRate rounding, we may withdraw too much
-        // here. That's okay; dust will just sit in contract till next rebalance
-        if (!hasExcessToken0) silo0.delegate_withdraw(amount0 - balance0);
-        if (!hasExcessToken1) silo1.delegate_withdraw(amount1 - balance1);
+        // Withdraw enough to create primary position
+        if (balance0 < amount0) silo0.delegate_withdraw(amount0 - balance0);
+        if (balance1 < amount1) silo1.delegate_withdraw(amount1 - balance1);
 
         // Update primary position's ticks
         primary.lower = TickMath.floor(cache.tick - int24(w), TICK_SPACING);
@@ -378,11 +342,60 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         (amount0, amount1) = primary.deposit(primary.liquidityForAmounts(cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into silos
-        if (hasExcessToken0) silo0.delegate_deposit(balance0 - amount0);
-        if (hasExcessToken1) silo1.delegate_deposit(balance1 - amount1);
+        if (balance0 > amount0) silo0.delegate_deposit(balance0 - amount0);
+        if (balance1 > amount1) silo1.delegate_deposit(balance1 - amount1);
 
         emit Recenter(primary.lower, primary.upper);
         return primary;
+    }
+
+    function _rewardCaller(address _rewardToken, uint64 _rebalanceCount, uint32 _urgency, uint32 _gas) private {
+        // Short-circuit if the caller has decided to be benevolent
+        if (_rewardToken == address(0)) {
+            emit Reward(address(0), 0, _urgency);
+            return;
+        }
+
+        // Otherwise, do math
+        unchecked {
+            uint256 rewardPerGas = rewardPerGasAverages[_rewardToken];
+            _gas = uint32(21000 + _gas - gasleft());
+            uint256 reward = FullMath.mulDiv(rewardPerGas * _gas, _urgency, 100_000);
+
+            if (_rewardToken == address(TOKEN0)) {
+                // constraints
+                if (reward > maintenanceBudget0 || rewardPerGas == 0) reward = maintenanceBudget0;
+                // payout
+                TOKEN0.safeTransfer(msg.sender, reward);
+                maintenanceBudget0 -= reward;
+                // accounting
+                rewardPerGas = reward / _gas;
+                if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
+                    maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
+            } else if (_rewardToken == address(TOKEN1)) {
+                // constraints
+                if (reward > maintenanceBudget1 || rewardPerGas == 0) reward = maintenanceBudget1;
+                // payout
+                TOKEN1.safeTransfer(msg.sender, reward);
+                maintenanceBudget1 -= reward;
+                // accounting
+                rewardPerGas = reward / _gas;
+                if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
+                    maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
+            } else {
+                // constraints
+                uint256 balance = IERC20(_rewardToken).balanceOf(address(this));
+                if (reward > balance || rewardPerGas == 0) reward = balance;
+                // payout
+                IERC20(_rewardToken).safeTransfer(msg.sender, reward);
+                // accounting
+                rewardPerGas = reward / _gas;
+            }
+
+            pushRewardPerGas(_rewardToken, rewardPerGas, _rebalanceCount);
+
+            emit Reward(_rewardToken, reward, _urgency);
+        }
     }
 
     /// @dev Withdraws fraction of liquidity from Uniswap, but collects *all* fees
@@ -393,7 +406,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         assert(numerator < denominator);
 
         // Read Uniswap positions from storage
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = loadPackedSlot();
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
 
         uint128 liquidity;
         uint256 earned0;
@@ -422,38 +435,38 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     }
 
     /// @dev Earmark some earned fees for maintenance, according to `maintenanceFee`. Return what's leftover
-    function _earmarkSomeForMaintenance(uint256 earned0, uint256 earned1) private returns (uint256, uint256) {
+    function _earmarkSomeForMaintenance(uint256 _earned0, uint256 _earned1) private returns (uint256, uint256) {
         uint256 toMaintenance;
 
         unchecked {
             // Accrue token0
-            toMaintenance = earned0 / MAINTENANCE_FEE;
-            earned0 -= toMaintenance;
+            toMaintenance = _earned0 / MAINTENANCE_FEE;
+            _earned0 -= toMaintenance;
             maintenanceBudget0 += toMaintenance;
             // Accrue token1
-            toMaintenance = earned1 / MAINTENANCE_FEE;
-            earned1 -= toMaintenance;
+            toMaintenance = _earned1 / MAINTENANCE_FEE;
+            _earned1 -= toMaintenance;
             maintenanceBudget1 += toMaintenance;
         }
 
-        return (earned0, earned1);
+        return (_earned0, _earned1);
     }
 
     function pushRewardPerGas(
-        address token,
-        uint256 rewardPerGas,
+        address _token,
+        uint256 _rewardPerGas,
         uint64 _rebalanceCount
     ) private {
-        uint256[10] storage rewardPerGasArray = rewardPerGasArrays[token];
+        uint256[10] storage rewardPerGasArray = rewardPerGasArrays[_token];
         unchecked {
             uint8 idx = uint8(_rebalanceCount % 10);
-            rewardPerGas /= 10;
-            rewardPerGasAverages[token] = rewardPerGasAverages[token] + rewardPerGas - rewardPerGasArray[idx];
-            rewardPerGasArray[idx] = rewardPerGas;
+            _rewardPerGas /= 10;
+            rewardPerGasAverages[_token] = rewardPerGasAverages[_token] + _rewardPerGas - rewardPerGasArray[idx];
+            rewardPerGasArray[idx] = _rewardPerGas;
         }
     }
 
-    function _storePackedSlot(
+    function _unlockAndStorePackedSlot(
         Uniswap.Position memory _primary,
         Uniswap.Position memory _limit,
         uint64 _rebalanceCount,
@@ -465,7 +478,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
             _limit.lower,
             _limit.upper,
             _rebalanceCount,
-            _recenterTimestamp
+            _recenterTimestamp,
+            false
         );
     }
 
@@ -473,7 +487,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
 
     /// @dev TODO
     // ✅
-    function loadPackedSlot()
+    function _loadPackedSlot()
         private
         view
         returns (
@@ -484,6 +498,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         )
     {
         PackedSlot memory _packedSlot = packedSlot;
+        require(!_packedSlot.locked);
         return (
             Uniswap.Position(UNI_POOL, _packedSlot.primaryLower, _packedSlot.primaryUpper),
             Uniswap.Position(UNI_POOL, _packedSlot.limitLower, _packedSlot.limitUpper),
@@ -499,12 +514,12 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
 
     /// @dev TODO
     function _computeRebalanceUrgency(uint48 _recenterTimestamp) private view returns (uint32 urgency) {
-        urgency = uint32(FullMath.mulDiv(10_000, block.timestamp - _recenterTimestamp, 24 hours));
+        urgency = uint32(FullMath.mulDiv(100_000, block.timestamp - _recenterTimestamp, RECENTERING_INTERVAL));
     }
 
     /// @inheritdoc IAloeBlendDerivedState
     function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = loadPackedSlot();
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
         (inventory0, inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
     }

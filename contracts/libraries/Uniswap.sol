@@ -69,6 +69,8 @@ library Uniswap {
             uint128
         )
     {
+        if (position.lower == position.upper) return (0, 0, 0);
+        
         (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position);
         (uint256 burnable0, uint256 burnable1) = amountsForLiquidity(position, sqrtPriceX96, liquidity);
 

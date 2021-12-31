@@ -22,7 +22,8 @@ interface IAloeBlendState {
             int24 limitLower,
             int24 limitUpper,
             uint64 rebalanceCount,
-            uint48 recenterTimestamp
+            uint48 recenterTimestamp,
+            bool locked
         );
 
     /// @notice The size of the budget available for things like `rebalance()` rewards (token0)
