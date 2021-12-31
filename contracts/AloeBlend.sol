@@ -45,6 +45,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     using Uniswap for Uniswap.Position;
     using Silo for ISilo;
 
+    /// TODO
     uint24 public constant RECENTERING_INTERVAL = 24 hours;
 
     /// @inheritdoc IAloeBlendImmutables
@@ -90,8 +91,10 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// @inheritdoc IAloeBlendState
     uint256 public maintenanceBudget1;
 
+    /// TODO
     mapping(address => uint256[10]) public rewardPerGasArrays;
 
+    /// TODO
     mapping(address => uint256) public rewardPerGasAverages;
 
     /// @dev Required for some silos
@@ -349,7 +352,12 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         return primary;
     }
 
-    function _rewardCaller(address _rewardToken, uint64 _rebalanceCount, uint32 _urgency, uint32 _gas) private {
+    function _rewardCaller(
+        address _rewardToken,
+        uint64 _rebalanceCount,
+        uint32 _urgency,
+        uint32 _gas
+    ) private {
         // Short-circuit if the caller has decided to be benevolent
         if (_rewardToken == address(0)) {
             emit Reward(address(0), 0, _urgency);
@@ -363,37 +371,29 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             uint256 reward = FullMath.mulDiv(rewardPerGas * _gas, _urgency, 100_000);
 
             if (_rewardToken == address(TOKEN0)) {
-                // constraints
-                if (reward > maintenanceBudget0 || rewardPerGas == 0) reward = maintenanceBudget0;
-                // payout
-                TOKEN0.safeTransfer(msg.sender, reward);
-                maintenanceBudget0 -= reward;
-                // accounting
+                uint256 budget = maintenanceBudget0;
+                if (reward > budget || rewardPerGas == 0) reward = budget;
                 rewardPerGas = reward / _gas;
-                if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
-                    maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
+
+                budget -= reward;
+                uint256 maxBudget = K * rewardPerGas * block.gaslimit;
+                maintenanceBudget0 = budget > maxBudget ? maxBudget : budget;
             } else if (_rewardToken == address(TOKEN1)) {
-                // constraints
-                if (reward > maintenanceBudget1 || rewardPerGas == 0) reward = maintenanceBudget1;
-                // payout
-                TOKEN1.safeTransfer(msg.sender, reward);
-                maintenanceBudget1 -= reward;
-                // accounting
+                uint256 budget = maintenanceBudget1;
+                if (reward > budget || rewardPerGas == 0) reward = budget;
                 rewardPerGas = reward / _gas;
-                if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
-                    maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
+
+                budget -= reward;
+                uint256 maxBudget = K * rewardPerGas * block.gaslimit;
+                maintenanceBudget1 = budget > maxBudget ? maxBudget : budget;
             } else {
-                // constraints
-                uint256 balance = IERC20(_rewardToken).balanceOf(address(this));
-                if (reward > balance || rewardPerGas == 0) reward = balance;
-                // payout
-                IERC20(_rewardToken).safeTransfer(msg.sender, reward);
-                // accounting
+                uint256 budget = IERC20(_rewardToken).balanceOf(address(this));
+                if (reward > budget || rewardPerGas == 0) reward = budget;
                 rewardPerGas = reward / _gas;
             }
 
+            IERC20(_rewardToken).safeTransfer(msg.sender, reward);
             pushRewardPerGas(_rewardToken, rewardPerGas, _rebalanceCount);
-
             emit Reward(_rewardToken, reward, _urgency);
         }
     }
