@@ -119,10 +119,11 @@ contract AloeBlendTest is DSTest {
     }
 
     function test_spec_computeNextPositionWidth() public {
-        assertEq(blend.computeNextPositionWidth(5e15), 201);
+        assertEq(blend.computeNextPositionWidth(5e15), 402);
         assertEq(blend.computeNextPositionWidth(1e17), 4054);
         assertEq(blend.computeNextPositionWidth(2e17), 8473);
-        assertEq(blend.computeNextPositionWidth(4e17), 13864);
+        assertEq(blend.computeNextPositionWidth(3e17), 13863);
+        assertEq(blend.computeNextPositionWidth(4e17), 27728);
     }
 
     function test_computeMagicAmounts(
@@ -151,12 +152,12 @@ contract AloeBlendTest is DSTest {
         uint256 amount1;
         uint96 magic;
 
-        (magic, amount0, amount1) = blend.computeMagicAmounts(0, 0, 100000, blend.MIN_WIDTH());
+        (magic, amount0, amount1) = blend.computeMagicAmounts(0, 0, 100000, blend.MIN_WIDTH() / 2);
         assertEq(amount0, 0);
         assertEq(amount1, 0);
         assertEq(magic, 792215870747104703836069196);
 
-        (magic, amount0, amount1) = blend.computeMagicAmounts(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH());
+        (magic, amount0, amount1) = blend.computeMagicAmounts(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH() / 2);
         assertEq(amount0, 555565);
         assertEq(amount1, 1111130);
         assertEq(magic, 39614800711660855234216192339);

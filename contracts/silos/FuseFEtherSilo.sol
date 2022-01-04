@@ -60,7 +60,7 @@ contract FuseFEtherSilo is ISilo {
         return FullMath.mulDiv(fEther.balanceOf(account), fEther.exchangeRateStored(), 1e18);
     }
 
-    function shouldAllowEmergencySweepOf(address token) external view override returns (bool shouldAllow) {
+    function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != address(fEther);
     }
 }

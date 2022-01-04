@@ -12,5 +12,5 @@ interface ISilo {
 
     function balanceOf(address account) external view returns (uint256 balance);
 
-    function shouldAllowEmergencySweepOf(address token) external view returns (bool shouldAllow);
+    function shouldAllowRemovalOf(address token) external view returns (bool shouldAllow);
 }

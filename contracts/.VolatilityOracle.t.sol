@@ -43,6 +43,15 @@ contract VolatilityOracleTest is DSTest {
         assertEq(tickSpacing, 1);
     }
 
+    function test_estimate24H_gas() public {
+        volatilityOracle.cacheMetadataFor(pool);
+        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
+
+        uint256 gas = gasleft();
+        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        assertEq(gas - gasleft(), 294395);
+    }
+
     function test_estimate24H_1() public {
         volatilityOracle.cacheMetadataFor(pool);
         (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
