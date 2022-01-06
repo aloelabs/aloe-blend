@@ -21,7 +21,7 @@ interface IAloeBlendState {
             int24 primaryUpper,
             int24 limitLower,
             int24 limitUpper,
-            uint64 epoch,
+            uint16 epoch,
             uint48 recenterTimestamp,
             bool locked
         );
