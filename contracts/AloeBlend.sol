@@ -193,7 +193,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         packedSlot.locked = false;
     }
 
-    /// TODO test that amount0 and amount1 returned by this (sent by this) always match inventory * shares / totalSupply
     /// @inheritdoc IAloeBlendActions
     function withdraw(
         uint256 shares,
