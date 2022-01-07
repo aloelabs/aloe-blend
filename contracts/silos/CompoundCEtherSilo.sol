@@ -57,7 +57,7 @@ contract CompoundCEtherSilo is ISilo {
         return FullMath.mulDiv(cEther.balanceOf(account), cEther.exchangeRateStored(), 1e18);
     }
 
-    function shouldAllowEmergencySweepOf(address token) external view override returns (bool shouldAllow) {
+    function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != address(cEther);
     }
 }
