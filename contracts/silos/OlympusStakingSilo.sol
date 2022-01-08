@@ -53,7 +53,7 @@ contract OlympusStakingSilo is ISilo {
         return sOHM.balanceOf(account);
     }
 
-    function shouldAllowEmergencySweepOf(address token) external view override returns (bool shouldAllow) {
+    function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != address(sOHM);
     }
 

@@ -59,7 +59,7 @@ contract FuseFTokenSilo is ISilo {
         return FullMath.mulDiv(_fToken.balanceOf(account), _fToken.exchangeRateStored(), 1e18);
     }
 
-    function shouldAllowEmergencySweepOf(address token) external view override returns (bool shouldAllow) {
+    function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != fToken;
     }
 
