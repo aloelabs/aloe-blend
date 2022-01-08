@@ -73,13 +73,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     ISilo public immutable silo1;
 
     struct PackedSlot {
-        int24 primaryLower;
-        int24 primaryUpper;
-        int24 limitLower;
-        int24 limitUpper;
-        uint48 recenterTimestamp;
-        bool maintenanceIsSustainable;
-        bool locked;
+        int24 primaryLower; // The primary position's lower tick bound
+        int24 primaryUpper; // The primary position's upper tick bound
+        int24 limitLower; // The limit order's lower tick bound
+        int24 limitUpper; // The limit order's upper tick bound
+        uint48 recenterTimestamp; // The `block.timestamp` from the last time the primary position moved
+        bool maintenanceIsSustainable; // Whether `maintenanceBudget0` or `maintenanceBudget1` is filled up
+        bool locked; // Whether the vault is currently locked to reentrancy
     }
 
     /// @inheritdoc IAloeBlendState
@@ -97,13 +97,15 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// @inheritdoc IAloeBlendState
     uint256 public maintenanceBudget1;
 
-    uint224[10] public rewardPerGas0Array;
+    /// @inheritdoc IAloeBlendState
+    mapping(address => uint256) public gasPrices;
 
-    uint224[10] public rewardPerGas1Array;
+    /// @dev Stores 14 samples of the gas price for each token, scaled by 1e4 and divided by 14. The sum over each
+    /// array is equal to the value reported by `gasPrices`
+    mapping(address => uint256[14]) private gasPriceArrays;
 
-    uint224 public rewardPerGas0Accumulator;
-
-    uint224 public rewardPerGas1Accumulator;
+    /// @dev The index of `gasPriceArrays[address]` in which the next gas price measurement will be stored
+    mapping(address => uint8) private gasPriceIdxs;
 
     /// @dev Required for some silos
     receive() external payable {}
@@ -407,38 +409,44 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         address _rewardToken,
         uint32 _urgency,
         uint32 _gas
-    ) private {
-        _gas = uint32(21000 + _gas - gasleft());
-        if (_rewardToken == address(TOKEN0)) {
-            // computations
-            // TODO address BlockSec audit finding
-            uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas0Accumulator, _urgency, 10_000));
-            uint256 rebalanceIncentive = _gas * rewardPerGas;
-            // constraints
-            if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget0) rebalanceIncentive = maintenanceBudget0;
-            // payout
-            TOKEN0.safeTransfer(msg.sender, rebalanceIncentive);
-            // accounting
-            pushRewardPerGas0(rewardPerGas, 0);
-            maintenanceBudget0 -= rebalanceIncentive;
-            if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
-                maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
-        } else {
-            // computations
-            // TODO address BlockSec audit finding
-            uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas1Accumulator, _urgency, 10_000));
-            uint256 rebalanceIncentive = _gas * rewardPerGas;
-            // constraints
-            if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget1) rebalanceIncentive = maintenanceBudget1;
-            // payout
-            TOKEN1.safeTransfer(msg.sender, rebalanceIncentive);
-            // accounting
-            pushRewardPerGas1(rewardPerGas, 0);
-            maintenanceBudget1 -= rebalanceIncentive;
-            if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
-                maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
+    ) private returns (bool maintenanceIsSustainable) {
+        // Short-circuit if the caller doesn't want to be rewarded
+        if (_rewardToken == address(0)) {
+            emit Reward(address(0), 0, _urgency);
+            return false;
         }
-        // TODO allow claiming of other tokens
+
+        // Otherwise, do math
+        uint256 rewardPerGas = gasPrices[_rewardToken]; // extra factor of 1e4
+        _gas = uint32(21000 + _gas - gasleft());
+        uint256 reward = FullMath.mulDiv(rewardPerGas * _gas, _urgency, 1e9);
+
+        if (_rewardToken == address(TOKEN0)) {
+            uint256 budget = maintenanceBudget0;
+            if (reward > budget || rewardPerGas == 0) reward = budget;
+            budget -= reward;
+
+            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
+            maintenanceIsSustainable = budget > maxBudget;
+            maintenanceBudget0 = maintenanceIsSustainable ? maxBudget : budget;
+        } else if (_rewardToken == address(TOKEN1)) {
+            uint256 budget = maintenanceBudget1;
+            if (reward > budget || rewardPerGas == 0) reward = budget;
+            budget -= reward;
+
+            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
+            maintenanceIsSustainable = budget > maxBudget;
+            maintenanceBudget1 = maintenanceIsSustainable ? maxBudget : budget;
+        } else {
+            uint256 budget = IERC20(_rewardToken).balanceOf(address(this));
+            if (reward > budget || rewardPerGas == 0) reward = budget;
+
+            require(silo0.shouldAllowRemovalOf(_rewardToken) && silo1.shouldAllowRemovalOf(_rewardToken));
+        }
+
+        IERC20(_rewardToken).safeTransfer(msg.sender, reward);
+        _pushGasPrice(_rewardToken, FullMath.mulDiv(1e4, reward, _gas));
+        emit Reward(_rewardToken, reward, _urgency);
     }
 
     /// @dev Earmark some earned fees for maintenance, according to `maintenanceFee`. Return what's leftover
@@ -491,23 +499,20 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
-    function pushRewardPerGas0(uint224 rewardPerGas0, uint16 _epoch) private {
+    /**
+     * @dev Assumes that `_gasPrice` represents the fair value of 1e4 units of gas, denominated in `_token`.
+     * Updates the contract's gas price oracle accordingly, including incrementing the array index.
+     * @param _token The ERC20 token for which average gas price should be updated
+     * @param _gasPrice The amount of `_token` necessary to incentivize expenditure of 1e4 units of gas
+     */
+    function _pushGasPrice(address _token, uint256 _gasPrice) private {
+        uint256[14] storage array = gasPriceArrays[_token];
+        uint8 idx = gasPriceIdxs[_token];
         unchecked {
-            uint8 idx = uint8(_epoch % 10);
-
-            rewardPerGas0 /= 10;
-            rewardPerGas0Accumulator = rewardPerGas0Accumulator + rewardPerGas0 - rewardPerGas0Array[idx];
-            rewardPerGas0Array[idx] = rewardPerGas0;
-        }
-    }
-
-    function pushRewardPerGas1(uint224 rewardPerGas1, uint16 _epoch) private {
-        unchecked {
-            uint8 idx = uint8(_epoch % 10);
-
-            rewardPerGas1 /= 10;
-            rewardPerGas1Accumulator = rewardPerGas1Accumulator + rewardPerGas1 - rewardPerGas1Array[idx];
-            rewardPerGas1Array[idx] = rewardPerGas1;
+            _gasPrice /= 14;
+            gasPrices[_token] = gasPrices[_token] + _gasPrice - array[idx];
+            array[idx] = _gasPrice;
+            gasPriceIdxs[_token] = (idx + 1) % 14;
         }
     }
 
@@ -515,7 +520,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         Uniswap.Position memory _primary,
         Uniswap.Position memory _limit,
         uint48 _recenterTimestamp,
-        bool maintenanceIsSustainable
+        bool _maintenanceIsSustainable
     ) private {
         packedSlot = PackedSlot(
             _primary.lower,
@@ -523,7 +528,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             _limit.lower,
             _limit.upper,
             _recenterTimestamp,
-            maintenanceIsSustainable,
+            _maintenanceIsSustainable,
             false
         );
     }
