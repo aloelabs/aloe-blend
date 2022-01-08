@@ -47,19 +47,22 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
     using Silo for ISilo;
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant MIN_WIDTH = 201; // 1% of inventory in primary Uniswap position
+    uint24 public constant RECENTERING_INTERVAL = 24 hours; // aim to recenter once per day
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant MAX_WIDTH = 13864; // 50% of inventory in primary Uniswap position
+    uint24 public constant MIN_WIDTH = 402; // 1% of inventory in primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant K = 10;
+    uint24 public constant MAX_WIDTH = 27728; // 50% of inventory in primary Uniswap position
+
+    /// @inheritdoc IAloeBlendImmutables
+    uint8 public constant K = 10; // maintenance budget should cover at least 10 rebalances
 
     /// @inheritdoc IAloeBlendImmutables
     uint8 public constant B = 2; // primary Uniswap position should cover 95% of trading activity
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant MAINTENANCE_FEE = 10; // 10 --> 1/10th of earnings from primary Uniswap position
+    uint8 public constant MAINTENANCE_FEE = 10; // 1/10th of earnings from primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
     IVolatilityOracle public immutable volatilityOracle;
@@ -156,7 +159,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
 
     /// @inheritdoc IAloeBlendDerivedState
     function getRebalanceUrgency() public view returns (uint32 urgency) {
-        urgency = uint32(FullMath.mulDiv(10_000, block.timestamp - recenterTimestamp, 24 hours));
+        urgency = uint32(FullMath.mulDiv(10_000, block.timestamp - recenterTimestamp, RECENTERING_INTERVAL));
     }
 
     /// @inheritdoc IAloeBlendActions
@@ -487,10 +490,11 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, ReentrancyGuard, IAloeBlend
         }
     }
 
-    /// @dev Computes position width based on sigma (volatility)
+    /// @dev Computes position width based on volatility. Doesn't revert
     function _computeNextPositionWidth(uint256 sigma) internal pure returns (uint24) {
-        if (sigma <= 5.024579e15) return MIN_WIDTH;
-        if (sigma >= 3.000058e17) return MAX_WIDTH;
+        // Instead of converting sigma to width and then clamping, we can check sigma directly
+        if (sigma <= 1.00481445e16) return MIN_WIDTH;
+        if (sigma >= 4.41180492e17) return MAX_WIDTH;
         sigma *= B; // scale by a constant factor to increase confidence
 
         unchecked {
