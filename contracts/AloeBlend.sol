@@ -453,6 +453,38 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         return (earned0, earned1);
     }
 
+    function _silo0Withdraw(uint256 _amount) private returns (uint256) {
+        unchecked {
+            uint256 a = silo0Basis;
+            uint256 b = silo0.balanceOf(address(this));
+            a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
+
+            if (_amount > b - a) _amount = b - a;
+
+            silo0.delegate_withdraw(a + _amount);
+            maintenanceBudget0 += a;
+            silo0Basis = b - a - _amount;
+
+            return _amount;
+        }
+    }
+
+    function _silo1Withdraw(uint256 _amount) private returns (uint256) {
+        unchecked {
+            uint256 a = silo1Basis;
+            uint256 b = silo1.balanceOf(address(this));
+            a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
+
+            if (_amount > b - a) _amount = b - a;
+
+            silo1.delegate_withdraw(a + _amount);
+            maintenanceBudget1 += a;
+            silo1Basis = b - a - _amount;
+
+            return _amount;
+        }
+    }
+
     function pushRewardPerGas0(uint224 rewardPerGas0, uint16 _epoch) private {
         unchecked {
             uint8 idx = uint8(_epoch % 10);
