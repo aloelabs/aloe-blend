@@ -16,7 +16,7 @@ contract AloeBlendFake is AloeBlend {
         width = _computeNextPositionWidth(IV);
     }
 
-    function computeAmountsForPrimary(
+    function computeMagicAmounts(
         uint256 inventory0,
         uint256 inventory1,
         uint224 priceX96,
@@ -25,12 +25,12 @@ contract AloeBlendFake is AloeBlend {
         external
         pure
         returns (
+            uint96,
             uint256,
-            uint256,
-            uint96
+            uint256
         )
     {
-        return _computeAmountsForPrimary(inventory0, inventory1, priceX96, halfWidth);
+        return _computeMagicAmounts(inventory0, inventory1, priceX96, halfWidth);
     }
 }
 
@@ -100,7 +100,7 @@ contract AloeBlendTest is DSTest {
         assertEq(blend.computeNextPositionWidth(4e17), 13864);
     }
 
-    function test_computeAmountsForPrimary(
+    function test_computeMagicAmounts(
         uint128 inventory0,
         uint128 inventory1,
         uint224 priceX96,
@@ -109,7 +109,7 @@ contract AloeBlendTest is DSTest {
         if (halfWidth < blend.MIN_WIDTH() / 2) return;
         if (halfWidth > blend.MAX_WIDTH() / 2) return;
 
-        (uint256 amount0, uint256 amount1, uint96 magic) = blend.computeAmountsForPrimary(
+        (uint96 magic, uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(
             inventory0,
             inventory1,
             priceX96,
@@ -121,17 +121,17 @@ contract AloeBlendTest is DSTest {
         assertLt(magic, 2**96);
     }
 
-    function test_spec_computeAmountsForPrimary() public {
+    function test_spec_computeMagicAmounts() public {
         uint256 amount0;
         uint256 amount1;
         uint96 magic;
 
-        (amount0, amount1, magic) = blend.computeAmountsForPrimary(0, 0, 100000, blend.MIN_WIDTH());
+        (magic, amount0, amount1) = blend.computeMagicAmounts(0, 0, 100000, blend.MIN_WIDTH() / 2);
         assertEq(amount0, 0);
         assertEq(amount1, 0);
         assertEq(magic, 792215870747104703836069196);
 
-        (amount0, amount1, magic) = blend.computeAmountsForPrimary(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH());
+        (magic, amount0, amount1) = blend.computeMagicAmounts(1111111, 2222222, 2 * 2**96, blend.MAX_WIDTH() / 2);
         assertEq(amount0, 555565);
         assertEq(amount1, 1111130);
         assertEq(magic, 39614800711660855234216192339);
