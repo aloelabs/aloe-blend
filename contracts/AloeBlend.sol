@@ -277,7 +277,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendActions
-    function rebalance(uint8 rewardToken) external {
+    function rebalance(address rewardToken) external {
         uint32 gasStart = uint32(gasleft());
         // Reentrancy guard is embedded in `_loadPackedSlot` to save gas
         (
@@ -348,39 +348,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             _earmarkSomeForMaintenance(earned0, earned1);
         }
 
-        // Reward caller
-        {
-            uint32 gasUsed = uint32(21000 + gasStart - gasleft());
-            if (rewardToken == 0) {
-                // computations
-                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas0Accumulator, cache.urgency, 10_000));
-                uint256 rebalanceIncentive = gasUsed * rewardPerGas;
-                // constraints
-                if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget0)
-                    rebalanceIncentive = maintenanceBudget0;
-                // payout
-                TOKEN0.safeTransfer(msg.sender, rebalanceIncentive);
-                // accounting
-                pushRewardPerGas0(rewardPerGas, 0);
-                maintenanceBudget0 -= rebalanceIncentive;
-                if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
-                    maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
-            } else {
-                // computations
-                uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas1Accumulator, cache.urgency, 10_000));
-                uint256 rebalanceIncentive = gasUsed * rewardPerGas;
-                // constraints
-                if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget1)
-                    rebalanceIncentive = maintenanceBudget1;
-                // payout
-                TOKEN1.safeTransfer(msg.sender, rebalanceIncentive);
-                // accounting
-                pushRewardPerGas1(rewardPerGas, 0);
-                maintenanceBudget1 -= rebalanceIncentive;
-                if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
-                    maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
-            }
-        }
+        _rewardCaller(rewardToken, cache.urgency, gasStart);
 
         emit Rebalance(cache.urgency, ratio, totalSupply, inventory0, inventory1);
         _unlockAndStorePackedSlot(primary, limit, recenterTimestamp, maintenanceIsSustainable);
@@ -433,6 +401,44 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
         emit Recenter(_primary.lower, _primary.upper, cache.magic);
         return _primary;
+    }
+
+    function _rewardCaller(
+        address _rewardToken,
+        uint32 _urgency,
+        uint32 _gas
+    ) private {
+        _gas = uint32(21000 + _gas - gasleft());
+        if (_rewardToken == address(TOKEN0)) {
+            // computations
+            // TODO address BlockSec audit finding
+            uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas0Accumulator, _urgency, 10_000));
+            uint256 rebalanceIncentive = _gas * rewardPerGas;
+            // constraints
+            if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget0) rebalanceIncentive = maintenanceBudget0;
+            // payout
+            TOKEN0.safeTransfer(msg.sender, rebalanceIncentive);
+            // accounting
+            pushRewardPerGas0(rewardPerGas, 0);
+            maintenanceBudget0 -= rebalanceIncentive;
+            if (maintenanceBudget0 > K * rewardPerGas * block.gaslimit)
+                maintenanceBudget0 = K * rewardPerGas * block.gaslimit;
+        } else {
+            // computations
+            // TODO address BlockSec audit finding
+            uint224 rewardPerGas = uint224(FullMath.mulDiv(rewardPerGas1Accumulator, _urgency, 10_000));
+            uint256 rebalanceIncentive = _gas * rewardPerGas;
+            // constraints
+            if (rewardPerGas == 0 || rebalanceIncentive > maintenanceBudget1) rebalanceIncentive = maintenanceBudget1;
+            // payout
+            TOKEN1.safeTransfer(msg.sender, rebalanceIncentive);
+            // accounting
+            pushRewardPerGas1(rewardPerGas, 0);
+            maintenanceBudget1 -= rebalanceIncentive;
+            if (maintenanceBudget1 > K * rewardPerGas * block.gaslimit)
+                maintenanceBudget1 = K * rewardPerGas * block.gaslimit;
+        }
+        // TODO allow claiming of other tokens
     }
 
     /// @dev Earmark some earned fees for maintenance, according to `maintenanceFee`. Return what's leftover
