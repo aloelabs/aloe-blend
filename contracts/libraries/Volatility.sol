@@ -11,7 +11,7 @@ import "./TickMath.sol";
 library Volatility {
     struct PoolMetadata {
         // the oldest oracle observation that's been populated by the pool
-        uint32 oldestObservation;
+        uint32 maxSecondsAgo;
         // the overall fee minus the protocol fee for token0, times 1e6
         uint24 gamma0;
         // the overall fee minus the protocol fee for token1, times 1e6
@@ -99,9 +99,9 @@ library Volatility {
      */
     function amount0ToAmount1(uint128 amount0, int24 tick) internal pure returns (uint256 amount1) {
         uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(tick);
-        uint224 geometricMeanPriceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, FixedPoint96.Q96));
+        uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, FixedPoint96.Q96));
 
-        amount1 = FullMath.mulDiv(amount0, geometricMeanPriceX96, FixedPoint96.Q96);
+        amount1 = FullMath.mulDiv(amount0, priceX96, FixedPoint96.Q96);
     }
 
     /**

@@ -34,7 +34,7 @@ contract AloeBlendFake is AloeBlend {
     }
 }
 
-contract VolatilityOracleFake is IVolatilityOracle {
+contract VolatilityOracleFake {
     function cachedPoolMetadata(address)
         external
         pure
@@ -77,7 +77,7 @@ contract AloeBlendTest is DSTest {
     AloeBlendFake blend;
 
     function setUp() public {
-        IVolatilityOracle oracle = new VolatilityOracleFake();
+        IVolatilityOracle oracle = IVolatilityOracle(address(new VolatilityOracleFake()));
         FactoryFake factory = new FactoryFake(oracle);
         blend = factory.create(
             IUniswapV3Pool(0xF1B63cD9d80f922514c04b0fD0a30373316dd75b),
