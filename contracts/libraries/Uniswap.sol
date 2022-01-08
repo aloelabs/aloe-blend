@@ -19,12 +19,18 @@ library Uniswap {
 
     /// @dev Do zero-burns to poke the Uniswap pools so earned fees are updated
     function poke(Position memory position) internal {
-        if (position.lower != position.upper) position.pool.burn(position.lower, position.upper, 0);
+        if (position.lower == position.upper) return;
+        (uint128 liquidity, , , , ) = info(position);
+        if (liquidity != 0) {
+            position.pool.burn(position.lower, position.upper, 0);
+        }
     }
 
     /// @dev Deposits liquidity in a range on the Uniswap pool.
     function deposit(Position memory position, uint128 liquidity) internal returns (uint256 amount0, uint256 amount1) {
-        (amount0, amount1) = position.pool.mint(address(this), position.lower, position.upper, liquidity, "");
+        if (liquidity != 0) {
+            (amount0, amount1) = position.pool.mint(address(this), position.lower, position.upper, liquidity, "");
+        }
     }
 
     /// @dev Withdraws all liquidity and collects all fees
@@ -70,7 +76,7 @@ library Uniswap {
         )
     {
         if (position.lower == position.upper) return (0, 0, 0);
-        
+
         (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position);
         (uint256 burnable0, uint256 burnable1) = amountsForLiquidity(position, sqrtPriceX96, liquidity);
 
