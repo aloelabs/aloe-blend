@@ -5,10 +5,10 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 interface IAloeBlendState {
     /// @notice The Uniswap position harvesting fees in the combined token0-token1 pool
-    function primary() external view returns (int24 lower, int24 upper);
+    function primary() external view returns (IUniswapV3Pool pool, int24 lower, int24 upper);
 
     /// @notice The Uniswap position used to rebalance when the vault deviates too far from 50/50
-    function limit() external view returns (int24 lower, int24 upper);
+    function limit() external view returns (IUniswapV3Pool pool, int24 lower, int24 upper);
 
     /// @notice The block.timestamp from the most recent call to `recenter()`
     function recenterTimestamp() external view returns (uint256);
