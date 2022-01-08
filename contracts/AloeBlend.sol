@@ -45,8 +45,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     using Uniswap for Uniswap.Position;
     using Silo for ISilo;
 
-    /// TODO
-    uint24 public constant RECENTERING_INTERVAL = 24 hours;
+    /// @inheritdoc IAloeBlendImmutables
+    uint24 public constant RECENTERING_INTERVAL = 24 hours; // aim to recenter once per day
 
     /// @inheritdoc IAloeBlendImmutables
     uint24 public constant MIN_WIDTH = 402; // 1% of inventory in primary Uniswap position
