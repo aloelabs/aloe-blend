@@ -86,7 +86,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         int24 primaryUpper;
         int24 limitLower;
         int24 limitUpper;
-        uint16 epoch;
         uint48 recenterTimestamp;
         bool maintenanceIsSustainable;
         bool locked;
@@ -109,6 +108,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     /// TODO
     mapping(address => uint256[10]) public rewardPerGasArrays;
+
+    /// TODO
+    mapping(address => uint8) public rewardPerGasIdxs;
 
     /// TODO
     mapping(address => uint256) public rewardPerGasAverages;
@@ -161,7 +163,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     {
         require(amount0Max != 0 || amount1Max != 0, "Aloe: 0 deposit");
         // Reentrancy guard is embedded in `_loadPackedSlot` to save gas
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , , ) = _loadPackedSlot();
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         packedSlot.locked = true;
 
         // Poke all assets
@@ -202,7 +204,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     ) external returns (uint256 amount0, uint256 amount1) {
         require(shares != 0, "Aloe: 0 shares");
         // Reentrancy guard is embedded in `_loadPackedSlot` to save gas
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , , ) = _loadPackedSlot();
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         packedSlot.locked = true;
 
         // Poke silos to ensure reported balances are correct
@@ -292,7 +294,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         (
             Uniswap.Position memory primary,
             Uniswap.Position memory limit,
-            uint16 epoch,
             uint48 recenterTimestamp,
             bool maintenanceIsSustainable
         ) = _loadPackedSlot();
@@ -370,11 +371,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             recenterTimestamp = uint48(block.timestamp);
         }
 
+        maintenanceIsSustainable = _rewardCaller(rewardToken, urgency, gas);
         emit Rebalance(ratio, totalSupply, inventory0, inventory1);
-        maintenanceIsSustainable = _rewardCaller(rewardToken, epoch, urgency, gas);
-        unchecked {
-            _unlockAndStorePackedSlot(primary, limit, epoch + 1, recenterTimestamp, maintenanceIsSustainable);
-        }
+        _unlockAndStorePackedSlot(primary, limit, recenterTimestamp, maintenanceIsSustainable);
     }
 
     /**
@@ -442,7 +441,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     function _rewardCaller(
         address _rewardToken,
-        uint16 _epoch,
         uint32 _urgency,
         uint32 _gas
     ) private returns (bool maintenanceIsSustainable) {
@@ -485,7 +483,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             }
 
             IERC20(_rewardToken).safeTransfer(msg.sender, reward);
-            pushRewardPerGas(_rewardToken, rewardPerGas, _epoch);
+            pushRewardPerGas(_rewardToken, rewardPerGas);
             emit Reward(_rewardToken, reward, _urgency);
         }
     }
@@ -522,24 +520,20 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
-    function pushRewardPerGas(
-        address _token,
-        uint256 _rewardPerGas,
-        uint16 _epoch
-    ) private {
+    function pushRewardPerGas(address _token, uint256 _rewardPerGas) private {
         uint256[10] storage rewardPerGasArray = rewardPerGasArrays[_token];
+        uint8 idx = rewardPerGasIdxs[_token];
         unchecked {
-            uint8 idx = uint8(_epoch % 10);
             _rewardPerGas /= 10;
             rewardPerGasAverages[_token] = rewardPerGasAverages[_token] + _rewardPerGas - rewardPerGasArray[idx];
             rewardPerGasArray[idx] = _rewardPerGas;
+            rewardPerGasIdxs[_token] = (idx + 1) % 10;
         }
     }
 
     function _unlockAndStorePackedSlot(
         Uniswap.Position memory _primary,
         Uniswap.Position memory _limit,
-        uint16 _epoch,
         uint48 _recenterTimestamp,
         bool maintenanceIsSustainable
     ) private {
@@ -548,7 +542,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             _primary.upper,
             _limit.lower,
             _limit.upper,
-            _epoch,
             _recenterTimestamp,
             maintenanceIsSustainable,
             false
@@ -565,7 +558,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         returns (
             Uniswap.Position memory,
             Uniswap.Position memory,
-            uint16,
             uint48,
             bool
         )
@@ -575,7 +567,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         return (
             Uniswap.Position(UNI_POOL, _packedSlot.primaryLower, _packedSlot.primaryUpper),
             Uniswap.Position(UNI_POOL, _packedSlot.limitLower, _packedSlot.limitUpper),
-            _packedSlot.epoch,
             _packedSlot.recenterTimestamp,
             _packedSlot.maintenanceIsSustainable
         );
@@ -593,7 +584,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     /// @inheritdoc IAloeBlendDerivedState
     function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , , ) = _loadPackedSlot();
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
         (inventory0, inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
     }
