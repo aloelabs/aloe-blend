@@ -82,13 +82,20 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     ISilo public immutable silo1;
 
     struct PackedSlot {
-        int24 primaryLower; // The primary position's lower tick bound
-        int24 primaryUpper; // The primary position's upper tick bound
-        int24 limitLower; // The limit order's lower tick bound
-        int24 limitUpper; // The limit order's upper tick bound
-        uint48 recenterTimestamp; // The `block.timestamp` from the last time the primary position moved
-        bool maintenanceIsSustainable; // Whether `maintenanceBudget0` or `maintenanceBudget1` is filled up
-        bool locked; // Whether the vault is currently locked to reentrancy
+        // The primary position's lower tick bound
+        int24 primaryLower;
+        // The primary position's upper tick bound
+        int24 primaryUpper;
+        // The limit order's lower tick bound
+        int24 limitLower;
+        // The limit order's upper tick bound
+        int24 limitUpper;
+        // The `block.timestamp` from the last time the primary position moved
+        uint48 recenterTimestamp;
+        // Whether `maintenanceBudget0` or `maintenanceBudget1` is filled up
+        bool maintenanceIsSustainable;
+        // Whether the vault is currently locked to reentrancy
+        bool locked;
     }
 
     /// @inheritdoc IAloeBlendState
@@ -579,7 +586,14 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         urgency = _getRebalanceUrgency(packedSlot.recenterTimestamp);
     }
 
-    /// @dev TODO
+    /**
+     * @notice Reports how badly the vault wants its `rebalance()` function to be called. Proportional to time
+     * elapsed since the primary position last moved.
+     * @dev Since `RECENTERING_INTERVAL` is 86400 seconds, urgency is guaranteed to be nonzero unless the primary
+     * position is moved more than once in a single block.
+     * @param _recenterTimestamp The `block.timestamp` from the last time the primary position moved
+     * @return urgency How badly the vault wants its `rebalance()` function to be called
+     */
     function _getRebalanceUrgency(uint48 _recenterTimestamp) private view returns (uint32 urgency) {
         urgency = uint32(FullMath.mulDiv(100_000, block.timestamp - _recenterTimestamp, RECENTERING_INTERVAL));
     }
@@ -592,13 +606,33 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     }
 
     struct InventoryDetails {
+        // The amount of token0 available to limit order, i.e. everything *not* in the primary position
         uint256 fluid0;
+        // The amount of token1 available to limit order, i.e. everything *not* in the primary position
         uint256 fluid1;
+        // The liquidity present in the primary position. Note that this may be higher than what the
+        // vault deposited since someone may designate this contract as a `mint()` recipient
         uint128 primaryLiquidity;
+        // The liquidity present in the limit order. Note that this may be higher than what the
+        // vault deposited since someone may designate this contract as a `mint()` recipient
         uint128 limitLiquidity;
     }
 
-    /// @dev TODO
+    /**
+     * @notice Estimate's the vault's liabilities to users -- in other words, how much would be paid out if all
+     * holders redeemed their LP tokens at once.
+     * @dev Underestimates the true payout unless both silos and Uniswap positions have just been poked. Also
+     * assumes that the maximum amount will accrue to the maintenance budget during the next `rebalance()`. If
+     * it takes less than that for the budget to reach capacity, then the values reported here may increase after
+     * calling `rebalance()`.
+     * @param _primary The primary position
+     * @param _limit The limit order; if inactive, `_limit.lower` should equal `_limit.upper`
+     * @param _sqrtPriceX96 The current sqrt(price) of the Uniswap pair from `slot0()`
+     * @return inventory0 The amount of token0 underlying all LP tokens
+     * @return inventory1 The amount of token1 underlying all LP tokens
+     * @return d A struct containing details that may be relevant to other functions. We return it here to avoid
+     * reloading things from external storage (saves gas).
+     */
     function _getInventory(
         Uniswap.Position memory _primary,
         Uniswap.Position memory _limit,
@@ -649,14 +683,12 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
-    /// @dev TODO
-    // ✅
+    /// @dev The amount of token0 in the contract that's not in maintenanceBudget0
     function _balance0() private view returns (uint256) {
         return TOKEN0.balanceOf(address(this)) - maintenanceBudget0;
     }
 
-    /// @dev TODO
-    // ✅
+    /// @dev The amount of token1 in the contract that's not in maintenanceBudget1
     function _balance1() private view returns (uint256) {
         return TOKEN1.balanceOf(address(this)) - maintenanceBudget1;
     }
