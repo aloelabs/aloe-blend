@@ -517,8 +517,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     }
 
     /**
-     * @dev Assumes that `_gasPrice` represents the fair value of 1e4 units of gas denominated in `_token`.
-     * Updates the contract's gas price oracle accordingly.
+     * @dev Assumes that `_gasPrice` represents the fair value of 1e4 units of gas, denominated in `_token`.
+     * Updates the contract's gas price oracle accordingly, including incrementing the array index.
      * @param _token The ERC20 token for which average gas price should be updated
      * @param _gasPrice The amount of `_token` necessary to incentivize expenditure of 1e4 units of gas
      */
