@@ -94,10 +94,10 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// @inheritdoc IAloeBlendState
     PackedSlot public packedSlot;
 
-    /// TODO
+    /// @inheritdoc IAloeBlendState
     uint256 public silo0Basis;
 
-    /// TODO
+    /// @inheritdoc IAloeBlendState
     uint256 public silo1Basis;
 
     /// @inheritdoc IAloeBlendState
@@ -107,13 +107,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     uint256 public maintenanceBudget1;
 
     /// TODO
-    mapping(address => uint256[10]) public rewardPerGasArrays;
+    mapping(address => uint256) public gasPrices;
 
     /// TODO
-    mapping(address => uint8) public rewardPerGasIdxs;
+    mapping(address => uint256[14]) private gasPriceArrays;
 
     /// TODO
-    mapping(address => uint256) public rewardPerGasAverages;
+    mapping(address => uint8) private gasPriceIdxs;
 
     /// @dev Required for some silos
     receive() external payable {}
@@ -452,7 +452,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
         // Otherwise, do math
         unchecked {
-            uint256 rewardPerGas = rewardPerGasAverages[_rewardToken];
+            uint256 rewardPerGas = gasPrices[_rewardToken];
             _gas = uint32(21000 + _gas - gasleft());
             uint256 reward = FullMath.mulDiv(rewardPerGas * _gas, _urgency, 100_000);
 
@@ -483,7 +483,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             }
 
             IERC20(_rewardToken).safeTransfer(msg.sender, reward);
-            pushRewardPerGas(_rewardToken, rewardPerGas);
+            _pushGasPrice(_rewardToken, rewardPerGas);
             emit Reward(_rewardToken, reward, _urgency);
         }
     }
@@ -520,14 +520,14 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
-    function pushRewardPerGas(address _token, uint256 _rewardPerGas) private {
-        uint256[10] storage rewardPerGasArray = rewardPerGasArrays[_token];
-        uint8 idx = rewardPerGasIdxs[_token];
+    function _pushGasPrice(address _token, uint256 _gasPrice) private {
+        uint256[14] storage array = gasPriceArrays[_token];
+        uint8 idx = gasPriceIdxs[_token];
         unchecked {
-            _rewardPerGas /= 10;
-            rewardPerGasAverages[_token] = rewardPerGasAverages[_token] + _rewardPerGas - rewardPerGasArray[idx];
-            rewardPerGasArray[idx] = _rewardPerGas;
-            rewardPerGasIdxs[_token] = (idx + 1) % 10;
+            _gasPrice /= 14;
+            gasPrices[_token] = gasPrices[_token] + _gasPrice - array[idx];
+            array[idx] = _gasPrice;
+            gasPriceIdxs[_token] = (idx + 1) % 14;
         }
     }
 
