@@ -451,41 +451,36 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
 
         // Otherwise, do math
-        unchecked {
-            uint256 rewardPerGas = gasPrices[_rewardToken];
-            _gas = uint32(21000 + _gas - gasleft());
-            uint256 reward = FullMath.mulDiv(rewardPerGas * _gas, _urgency, 100_000);
+        uint256 rewardPerGas = gasPrices[_rewardToken]; // extra factor of 1e4
+        _gas = uint32(21000 + _gas - gasleft());
+        uint256 reward = FullMath.mulDiv(rewardPerGas * _gas, _urgency, 1e9);
 
-            if (_rewardToken == address(TOKEN0)) {
-                uint256 budget = maintenanceBudget0;
-                if (reward > budget || rewardPerGas == 0) reward = budget;
-                rewardPerGas = reward / _gas;
+        if (_rewardToken == address(TOKEN0)) {
+            uint256 budget = maintenanceBudget0;
+            if (reward > budget || rewardPerGas == 0) reward = budget;
+            budget -= reward;
 
-                budget -= reward;
-                uint256 maxBudget = K * rewardPerGas * block.gaslimit;
-                maintenanceIsSustainable = budget > maxBudget;
-                maintenanceBudget0 = maintenanceIsSustainable ? maxBudget : budget;
-            } else if (_rewardToken == address(TOKEN1)) {
-                uint256 budget = maintenanceBudget1;
-                if (reward > budget || rewardPerGas == 0) reward = budget;
-                rewardPerGas = reward / _gas;
+            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
+            maintenanceIsSustainable = budget > maxBudget;
+            maintenanceBudget0 = maintenanceIsSustainable ? maxBudget : budget;
+        } else if (_rewardToken == address(TOKEN1)) {
+            uint256 budget = maintenanceBudget1;
+            if (reward > budget || rewardPerGas == 0) reward = budget;
+            budget -= reward;
 
-                budget -= reward;
-                uint256 maxBudget = K * rewardPerGas * block.gaslimit;
-                maintenanceIsSustainable = budget > maxBudget;
-                maintenanceBudget1 = maintenanceIsSustainable ? maxBudget : budget;
-            } else {
-                uint256 budget = IERC20(_rewardToken).balanceOf(address(this));
-                if (reward > budget || rewardPerGas == 0) reward = budget;
-                rewardPerGas = reward / _gas;
+            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
+            maintenanceIsSustainable = budget > maxBudget;
+            maintenanceBudget1 = maintenanceIsSustainable ? maxBudget : budget;
+        } else {
+            uint256 budget = IERC20(_rewardToken).balanceOf(address(this));
+            if (reward > budget || rewardPerGas == 0) reward = budget;
 
-                require(silo0.shouldAllowRemovalOf(_rewardToken) && silo1.shouldAllowRemovalOf(_rewardToken));
-            }
-
-            IERC20(_rewardToken).safeTransfer(msg.sender, reward);
-            _pushGasPrice(_rewardToken, rewardPerGas);
-            emit Reward(_rewardToken, reward, _urgency);
+            require(silo0.shouldAllowRemovalOf(_rewardToken) && silo1.shouldAllowRemovalOf(_rewardToken));
         }
+
+        IERC20(_rewardToken).safeTransfer(msg.sender, reward);
+        _pushGasPrice(_rewardToken, FullMath.mulDiv(1e4, reward, _gas));
+        emit Reward(_rewardToken, reward, _urgency);
     }
 
     function _silo0Withdraw(uint256 _amount) private returns (uint256) {
@@ -520,6 +515,12 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
+    /**
+     * @dev Assumes that `_gasPrice` represents the fair value of 1e4 units of gas denominated in `_token`.
+     * Updates the contract's gas price oracle accordingly.
+     * @param _token The ERC20 token for which average gas price should be updated
+     * @param _gasPrice The amount of `_token` necessary to incentivize expenditure of 1e4 units of gas
+     */
     function _pushGasPrice(address _token, uint256 _gasPrice) private {
         uint256[14] storage array = gasPriceArrays[_token];
         uint8 idx = gasPriceIdxs[_token];

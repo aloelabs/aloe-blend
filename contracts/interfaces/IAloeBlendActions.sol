@@ -45,7 +45,13 @@ interface IAloeBlendActions {
 
     /**
      * @notice Rebalances vault to maintain 50/50 inventory ratio
-     * @param rewardToken What token the reward should be denominated in
+     * @dev `rewardToken` may be something other than token0 or token1, in which case the available maintenance budget
+     * is equal to the contract's balance. Also note that this will revert unless both silos report that removal of
+     * `rewardToken` is allowed. For example, a Compound silo would block removal of its cTokens.
+     * @param rewardToken The ERC20 token in which the reward should be denominated. If `rewardToken` is the 0 address,
+     * no reward will be given. Otherwise, the reward is based on (a) time elapsed since primary position last moved
+     * and (b) the contract's estimate of how much each unit of gas costs. Since (b) is fully determined by past
+     * contract interactions and is known to all participants, (a) creates a Dutch Auction for calling this function.
      */
     function rebalance(address rewardToken) external;
 }
