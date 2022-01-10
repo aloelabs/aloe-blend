@@ -381,33 +381,33 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
      * Assume inventory is strictly underestimated
      */
     function _recenter(
-        RebalanceCache memory cache,
-        Uniswap.Position memory primary,
-        uint128 primaryLiquidity,
-        uint256 inventory0,
-        uint256 inventory1,
-        bool maintenanceIsSustainable
+        RebalanceCache memory _cache,
+        Uniswap.Position memory _primary,
+        uint128 _primaryLiquidity,
+        uint256 _inventory0,
+        uint256 _inventory1,
+        bool _maintenanceIsSustainable
     ) private returns (Uniswap.Position memory) {
         // Exit primary Uniswap position
         unchecked {
-            (, , uint256 earned0, uint256 earned1) = primary.withdraw(primaryLiquidity);
+            (, , uint256 earned0, uint256 earned1) = _primary.withdraw(_primaryLiquidity);
             maintenanceBudget0 += earned0 / MAINTENANCE_FEE;
             maintenanceBudget1 += earned1 / MAINTENANCE_FEE;
         }
 
         // Decide primary position width
-        uint24 w = maintenanceIsSustainable
-            ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, cache.sqrtPriceX96, cache.tick))
+        uint24 w = _maintenanceIsSustainable
+            ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick))
             : MAX_WIDTH;
         w = w >> 1;
-        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(inventory0, inventory1, cache.priceX96, w);
+        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, _cache.priceX96, w);
 
         // If contract balance (leaving out the float) is insufficient, withdraw from silos
         int256 balance0;
         int256 balance1;
         unchecked {
-            balance0 = int256(_balance0()) - int256(FullMath.mulDiv(inventory0, FLOAT_PERCENTAGE, 10_000));
-            balance1 = int256(_balance1()) - int256(FullMath.mulDiv(inventory1, FLOAT_PERCENTAGE, 10_000));
+            balance0 = int256(_balance0()) - int256(FullMath.mulDiv(_inventory0, FLOAT_PERCENTAGE, 10_000));
+            balance1 = int256(_balance1()) - int256(FullMath.mulDiv(_inventory1, FLOAT_PERCENTAGE, 10_000));
             if (balance0 < int256(amount0)) {
                 amount0 = uint256(balance0 + int256(_silo0Withdraw(uint256(int256(amount0) - balance0))));
             }
@@ -417,13 +417,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
 
         // Update primary position's ticks
-        primary.lower = TickMath.floor(cache.tick - int24(w), TICK_SPACING);
-        primary.upper = TickMath.ceil(cache.tick + int24(w), TICK_SPACING);
-        if (primary.lower < MIN_TICK) primary.lower = MIN_TICK;
-        if (primary.upper > MAX_TICK) primary.upper = MAX_TICK;
+        _primary.lower = TickMath.floor(_cache.tick - int24(w), TICK_SPACING);
+        _primary.upper = TickMath.ceil(_cache.tick + int24(w), TICK_SPACING);
+        if (_primary.lower < MIN_TICK) _primary.lower = MIN_TICK;
+        if (_primary.upper > MAX_TICK) _primary.upper = MAX_TICK;
 
         // Place some liquidity in Uniswap
-        (amount0, amount1) = primary.deposit(primary.liquidityForAmounts(cache.sqrtPriceX96, amount0, amount1));
+        (amount0, amount1) = _primary.deposit(_primary.liquidityForAmounts(_cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into silos
         if (balance0 > int256(amount0)) {
@@ -435,8 +435,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             silo1Basis += uint256(balance1) - amount1;
         }
 
-        emit Recenter(primary.lower, primary.upper);
-        return primary;
+        emit Recenter(_primary.lower, _primary.upper);
+        return _primary;
     }
 
     function _rewardCaller(
@@ -535,7 +535,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         Uniswap.Position memory _primary,
         Uniswap.Position memory _limit,
         uint48 _recenterTimestamp,
-        bool maintenanceIsSustainable
+        bool _maintenanceIsSustainable
     ) private {
         packedSlot = PackedSlot(
             _primary.lower,
@@ -543,7 +543,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             _limit.lower,
             _limit.upper,
             _recenterTimestamp,
-            maintenanceIsSustainable,
+            _maintenanceIsSustainable,
             false
         );
     }
