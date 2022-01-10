@@ -49,7 +49,7 @@ contract VolatilityOracleTest is DSTest {
 
         uint256 gas = gasleft();
         volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
-        assertEq(gas - gasleft(), 294395);
+        assertEq(gas - gasleft(), 134438);
     }
 
     function test_estimate24H_1() public {
@@ -119,6 +119,10 @@ contract VolatilityOracleTest is DSTest {
 
             hevm.warp(block.timestamp + 61 minutes);
         }
+
+        uint256 gas = gasleft();
+        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        assertEq(gas - gasleft(), 25368);
     }
 
     function test_estimate24H_4() public {

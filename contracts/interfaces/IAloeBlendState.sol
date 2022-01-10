@@ -39,4 +39,13 @@ interface IAloeBlendState {
 
     /// @notice The amount of token1 available for things like `rebalance()` rewards
     function maintenanceBudget1() external view returns (uint256);
+
+    /**
+     * @notice The contract's opinion on the fair value of 1e4 units of gas, denominated in `_token`
+     * @dev The value reported here is an average over 14 samples. Nominally there is 1 sample per day, but actual
+     * timing isn't stored. Please do not use this as more than a low fidelity approximation/proxy for truth.
+     * @param token The ERC20 token for which the average gas price should be retrieved
+     * @return gasPrice The amount of `_token` that may motivate expenditure of 1e4 units of gas
+     */
+    function gasPrices(address token) external view returns (uint256 gasPrice);
 }

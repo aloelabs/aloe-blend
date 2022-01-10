@@ -82,13 +82,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     ISilo public immutable silo1;
 
     struct PackedSlot {
-        int24 primaryLower;
-        int24 primaryUpper;
-        int24 limitLower;
-        int24 limitUpper;
-        uint48 recenterTimestamp;
-        bool maintenanceIsSustainable;
-        bool locked;
+        int24 primaryLower; // The primary position's lower tick bound
+        int24 primaryUpper; // The primary position's upper tick bound
+        int24 limitLower; // The limit order's lower tick bound
+        int24 limitUpper; // The limit order's upper tick bound
+        uint48 recenterTimestamp; // The `block.timestamp` from the last time the primary position moved
+        bool maintenanceIsSustainable; // Whether `maintenanceBudget0` or `maintenanceBudget1` is filled up
+        bool locked; // Whether the vault is currently locked to reentrancy
     }
 
     /// @inheritdoc IAloeBlendState
@@ -106,13 +106,14 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// @inheritdoc IAloeBlendState
     uint256 public maintenanceBudget1;
 
-    /// TODO
+    /// @inheritdoc IAloeBlendState
     mapping(address => uint256) public gasPrices;
 
-    /// TODO
+    /// @dev Stores 14 samples of the gas price for each token, scaled by 1e4 and divided by 14. The sum over each
+    /// array is equal to the value reported by `gasPrices`
     mapping(address => uint256[14]) private gasPriceArrays;
 
-    /// TODO
+    /// @dev The index of `gasPriceArrays[address]` in which the next gas price measurement will be stored
     mapping(address => uint8) private gasPriceIdxs;
 
     /// @dev Required for some silos
@@ -666,8 +667,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// @dev Computes position width based on volatility. Doesn't revert
     // ✅
     function _computeNextPositionWidth(uint256 _sigma) internal pure returns (uint24) {
-        if (_sigma <= 5.024579e15) return MIN_WIDTH;
-        if (_sigma >= 3.000058e17) return MAX_WIDTH;
+        if (_sigma <= 1.00481445e16) return MIN_WIDTH;
+        if (_sigma >= 4.41180492e17) return MAX_WIDTH;
         _sigma *= B; // scale by a constant factor to increase confidence
 
         unchecked {

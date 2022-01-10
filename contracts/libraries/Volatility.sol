@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.10;
 
+import "@rari-capital/solmate/src/utils/FixedPointMathLib.sol";
+
 import "./FixedPoint96.sol";
 import "./FullMath.sol";
-import "./Math.sol";
 import "./TickMath.sol";
 
 /// @title Volatility
@@ -81,13 +82,19 @@ library Volatility {
         }
 
         uint128 sqrtTickTVLX32 = uint128(
-            Math.sqrt(computeTickTVLX64(metadata.tickSpacing, data.currentTick, data.sqrtPriceX96, data.tickLiquidity))
+            FixedPointMathLib.sqrt(
+                computeTickTVLX64(metadata.tickSpacing, data.currentTick, data.sqrtPriceX96, data.tickLiquidity)
+            )
         );
-        uint48 timeAdjustmentX32 = uint48(Math.sqrt((uint256(1 days) << 64) / (b.timestamp - a.timestamp)));
+        uint48 timeAdjustmentX32 = uint48(
+            FixedPointMathLib.sqrt((uint256(1 days) << 64) / (b.timestamp - a.timestamp))
+        );
 
         if (sqrtTickTVLX32 == 0) return 0;
         unchecked {
-            return (uint256(2e18) * uint256(timeAdjustmentX32) * Math.sqrt(volumeGamma0Gamma1)) / sqrtTickTVLX32;
+            return
+                (uint256(2e18) * uint256(timeAdjustmentX32) * FixedPointMathLib.sqrt(volumeGamma0Gamma1)) /
+                sqrtTickTVLX32;
         }
     }
 

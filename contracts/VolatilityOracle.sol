@@ -65,7 +65,7 @@ contract VolatilityOracle is IVolatilityOracle {
         uint160 sqrtPriceX96,
         int24 tick
     ) external returns (uint256 IV) {
-        Volatility.FeeGrowthGlobals[25] memory feeGrowthGlobal = feeGrowthGlobals[address(pool)];
+        Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal = feeGrowthGlobals[address(pool)];
         uint8 readIndex = _pickReadIndex(pool, feeGrowthGlobal);
 
         Volatility.FeeGrowthGlobals memory current;
@@ -114,7 +114,7 @@ contract VolatilityOracle is IVolatilityOracle {
         );
     }
 
-    function _pickReadIndex(IUniswapV3Pool pool, Volatility.FeeGrowthGlobals[25] memory feeGrowthGlobal)
+    function _pickReadIndex(IUniswapV3Pool pool, Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal)
         private
         view
         returns (uint8)

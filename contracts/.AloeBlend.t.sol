@@ -119,11 +119,13 @@ contract AloeBlendTest is DSTest {
     }
 
     function test_spec_computeNextPositionWidth() public {
-        assertEq(blend.computeNextPositionWidth(5e15), 402);
+        assertEq(blend.computeNextPositionWidth(1e16), 402);
+        assertEq(blend.computeNextPositionWidth(2e16), 800);
         assertEq(blend.computeNextPositionWidth(1e17), 4054);
         assertEq(blend.computeNextPositionWidth(2e17), 8473);
         assertEq(blend.computeNextPositionWidth(3e17), 13863);
-        assertEq(blend.computeNextPositionWidth(4e17), 27728);
+        assertEq(blend.computeNextPositionWidth(4e17), 21973);
+        assertEq(blend.computeNextPositionWidth(5e17), 27728);
     }
 
     function test_computeMagicAmounts(
