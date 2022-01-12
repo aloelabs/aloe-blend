@@ -125,46 +125,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         silo1 = _silo1;
     }
 
-    /// @inheritdoc IAloeBlendDerivedState
-    function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
-        (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
-        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
-        (inventory0, inventory1, , ) = _getDetailedInventory(primary, limit, sqrtPriceX96, true);
-    }
-
-    function _getDetailedInventory(
-        Uniswap.Position memory primary,
-        Uniswap.Position memory limit,
-        uint160 sqrtPriceX96,
-        bool includeLimit
-    )
-        private
-        view
-        returns (
-            uint256 inventory0,
-            uint256 inventory1,
-            uint256 availableForLimit0,
-            uint256 availableForLimit1
-        )
-    {
-        if (includeLimit) {
-            (availableForLimit0, availableForLimit1, ) = limit.collectableAmountsAsOfLastPoke(sqrtPriceX96);
-        }
-        // Everything in silos + everything in the contract, except maintenance budget
-        availableForLimit0 += silo0.balanceOf(address(this)) + _balance0();
-        availableForLimit1 += silo1.balanceOf(address(this)) + _balance1();
-        // Everything in primary Uniswap position. Limit order is placed without moving this, so its
-        // amounts don't get added to availableForLimitX.
-        (inventory0, inventory1, ) = primary.collectableAmountsAsOfLastPoke(sqrtPriceX96);
-        inventory0 += availableForLimit0;
-        inventory1 += availableForLimit1;
-    }
-
-    /// @inheritdoc IAloeBlendDerivedState
-    function getRebalanceUrgency() public view returns (uint32 urgency) {
-        urgency = uint32(FullMath.mulDiv(10_000, block.timestamp - packedSlot.recenterTimestamp, RECENTERING_INTERVAL));
-    }
-
     /// @inheritdoc IAloeBlendActions
     function deposit(
         uint256 amount0Max,
@@ -192,9 +152,16 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
         // Fetch instantaneous price from Uniswap
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
-        uint224 priceX96 = uint224(FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, Q96));
 
-        (shares, amount0, amount1) = _computeLPShares(amount0Max, amount1Max, priceX96);
+        (uint256 inventory0, uint256 inventory1) = getInventory();
+        (shares, amount0, amount1) = _computeLPShares(
+            totalSupply,
+            inventory0,
+            inventory1,
+            amount0Max,
+            amount1Max,
+            sqrtPriceX96
+        );
         require(shares != 0, "Aloe: 0 shares");
         require(amount0 >= amount0Min, "Aloe: amount0 too low");
         require(amount1 >= amount1Min, "Aloe: amount1 too low");
@@ -286,8 +253,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         (uint128 liquidity, , , , ) = limit.info();
         limit.withdraw(liquidity);
 
-        (uint256 inventory0, uint256 inventory1, uint256 fluid0, uint256 fluid1) = _getDetailedInventory(
-            primary, 
+        (uint256 inventory0, uint256 inventory1, uint256 fluid0, uint256 fluid1) = _getInventory(
+            primary,
             limit,
             cache.sqrtPriceX96,
             false
@@ -395,7 +362,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         uint256 amount0;
         uint256 amount1;
         cache.w = cache.w >> 1;
-        (amount0, amount1, cache.magic) = _computeAmountsForPrimary(inventory0, inventory1, cache.priceX96, cache.w);
+        (cache.magic, amount0, amount1) = _computeMagicAmounts(inventory0, inventory1, cache.priceX96, cache.w);
 
         uint256 balance0 = _balance0();
         uint256 balance1 = _balance1();
@@ -424,103 +391,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         return _primary;
     }
 
-    /// @dev Calculates the largest possible `amount0` and `amount1` such that
-    /// they're in the same proportion as total amounts, but not greater than
-    /// `amount0Max` and `amount1Max` respectively.
-    function _computeLPShares(
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint224 priceX96
-    )
-        private
-        view
-        returns (
-            uint256 shares,
-            uint256 amount0,
-            uint256 amount1
-        )
-    {
-        uint256 _totalSupply = totalSupply;
-        (uint256 inventory0, uint256 inventory1) = getInventory();
-
-        // If total supply > 0, pool can't be empty
-        assert(_totalSupply == 0 || inventory0 != 0 || inventory1 != 0);
-
-        if (_totalSupply == 0) {
-            // For first deposit, enforce 50/50 ratio
-            amount0 = FullMath.mulDiv(amount1Max, Q96, priceX96);
-
-            if (amount0 < amount0Max) {
-                amount1 = amount1Max;
-                shares = amount1;
-            } else {
-                amount0 = amount0Max;
-                amount1 = FullMath.mulDiv(amount0, priceX96, Q96);
-                shares = amount0;
-            }
-        } else if (inventory0 == 0) {
-            amount1 = amount1Max;
-            shares = FullMath.mulDiv(amount1, _totalSupply, inventory1);
-        } else if (inventory1 == 0) {
-            amount0 = amount0Max;
-            shares = FullMath.mulDiv(amount0, _totalSupply, inventory0);
-        } else {
-            amount0 = FullMath.mulDiv(amount1Max, inventory0, inventory1);
-
-            if (amount0 < amount0Max) {
-                amount1 = amount1Max;
-                shares = FullMath.mulDiv(amount1, _totalSupply, inventory1);
-            } else {
-                amount0 = amount0Max;
-                amount1 = FullMath.mulDiv(amount0, inventory1, inventory0);
-                shares = FullMath.mulDiv(amount0, _totalSupply, inventory0);
-            }
-        }
-    }
-
-    /// @dev Computes amounts that should be placed in Uniswap position
-    function _computeAmountsForPrimary(
-        uint256 inventory0,
-        uint256 inventory1,
-        uint224 priceX96,
-        uint24 halfWidth
-    )
-        internal
-        pure
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint96 magic
-        )
-    {
-        magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-int24(halfWidth)));
-        if (FullMath.mulDiv(inventory0, priceX96, Q96) > inventory1) {
-            amount1 = FullMath.mulDiv(inventory1, magic, Q96);
-            amount0 = FullMath.mulDiv(amount1, Q96, priceX96);
-        } else {
-            amount0 = FullMath.mulDiv(inventory0, magic, Q96);
-            amount1 = FullMath.mulDiv(amount0, priceX96, Q96);
-        }
-    }
-
-    /// @dev Computes position width based on volatility. Doesn't revert
-    function _computeNextPositionWidth(uint256 sigma) internal pure returns (uint24) {
-        // Instead of converting sigma to width and then clamping, we can check sigma directly
-        if (sigma <= 1.00481445e16) return MIN_WIDTH;
-        if (sigma >= 4.41180492e17) return MAX_WIDTH;
-        sigma *= B; // scale by a constant factor to increase confidence
-
-        unchecked {
-            uint160 ratio = uint160((Q96 * (1e18 + sigma)) / (1e18 - sigma));
-            return uint24(TickMath.getTickAtSqrtRatio(ratio)) >> 1;
-        }
-    }
-
     /// @dev Withdraws fraction of liquidity from Uniswap, but collects *all* fees from it
-    function _withdrawFractionFromUniswap(Uniswap.Position memory primary, Uniswap.Position memory limit, uint256 numerator, uint256 denominator)
-        private
-        returns (uint256 amount0, uint256 amount1)
-    {
+    function _withdrawFractionFromUniswap(
+        Uniswap.Position memory primary,
+        Uniswap.Position memory limit,
+        uint256 numerator,
+        uint256 denominator
+    ) private returns (uint256 amount0, uint256 amount1) {
         assert(numerator < denominator);
         // Primary Uniswap position
         Uniswap.Position memory _primary = primary;
@@ -603,6 +480,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         );
     }
 
+    // ⬇️⬇️⬇️⬇️ VIEW FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
+
     /// @dev TODO
     function _loadPackedSlot()
         private
@@ -624,11 +503,157 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         );
     }
 
+    /// @inheritdoc IAloeBlendDerivedState
+    function getRebalanceUrgency() public view returns (uint32 urgency) {
+        urgency = uint32(FullMath.mulDiv(10_000, block.timestamp - packedSlot.recenterTimestamp, RECENTERING_INTERVAL));
+    }
+
+    /// @inheritdoc IAloeBlendDerivedState
+    function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
+        (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
+        (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
+        (inventory0, inventory1, , ) = _getInventory(primary, limit, sqrtPriceX96, true);
+    }
+
+    function _getInventory(
+        Uniswap.Position memory primary,
+        Uniswap.Position memory limit,
+        uint160 sqrtPriceX96,
+        bool includeLimit
+    )
+        private
+        view
+        returns (
+            uint256 inventory0,
+            uint256 inventory1,
+            uint256 availableForLimit0,
+            uint256 availableForLimit1
+        )
+    {
+        if (includeLimit) {
+            (availableForLimit0, availableForLimit1, ) = limit.collectableAmountsAsOfLastPoke(sqrtPriceX96);
+        }
+        // Everything in silos + everything in the contract, except maintenance budget
+        availableForLimit0 += silo0.balanceOf(address(this)) + _balance0();
+        availableForLimit1 += silo1.balanceOf(address(this)) + _balance1();
+        // Everything in primary Uniswap position. Limit order is placed without moving this, so its
+        // amounts don't get added to availableForLimitX.
+        (inventory0, inventory1, ) = primary.collectableAmountsAsOfLastPoke(sqrtPriceX96);
+        inventory0 += availableForLimit0;
+        inventory1 += availableForLimit1;
+    }
+
+    /// @dev TODO
     function _balance0() private view returns (uint256) {
         return TOKEN0.balanceOf(address(this)) - maintenanceBudget0;
     }
 
+    /// @dev TODO
     function _balance1() private view returns (uint256) {
         return TOKEN1.balanceOf(address(this)) - maintenanceBudget1;
+    }
+
+    // ⬆️⬆️⬆️⬆️ VIEW FUNCTIONS ⬆️⬆️⬆️⬆️  ------------------------------------------------------------------------------
+    // ⬇️⬇️⬇️⬇️ PURE FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
+
+    /// @dev Computes position width based on sigma (volatility)
+    function _computeNextPositionWidth(uint256 sigma) internal pure returns (uint24) {
+        if (sigma <= 5.024579e15) return MIN_WIDTH;
+        if (sigma >= 3.000058e17) return MAX_WIDTH;
+        sigma *= B; // scale by a constant factor to increase confidence
+
+        unchecked {
+            uint160 ratio = uint160((Q96 * (1e18 + sigma)) / (1e18 - sigma));
+            return uint24(TickMath.getTickAtSqrtRatio(ratio)) >> 1;
+        }
+    }
+
+    /// @dev Computes amounts that should be placed in primary Uniswap position to maintain 50/50 inventory ratio.
+    /// Doesn't revert as long as MIN_WIDTH <= _halfWidth * 2 <= MAX_WIDTH
+    // ✅
+    function _computeMagicAmounts(
+        uint256 inventory0,
+        uint256 inventory1,
+        uint224 priceX96,
+        uint24 halfWidth
+    )
+        internal
+        pure
+        returns (
+            uint96 magic,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-int24(halfWidth)));
+        if (FullMath.mulDiv(inventory0, priceX96, Q96) > inventory1) {
+            amount1 = FullMath.mulDiv(inventory1, magic, Q96);
+            amount0 = FullMath.mulDiv(amount1, Q96, priceX96);
+        } else {
+            amount0 = FullMath.mulDiv(inventory0, magic, Q96);
+            amount1 = FullMath.mulDiv(amount0, priceX96, Q96);
+        }
+    }
+
+    /// @dev Computes the largest possible `amount0` and `amount1` such that they match the current inventory ratio,
+    /// but are not greater than `_amount0Max` and `_amount1Max` respectively. May revert if the following are true:
+    ///     _totalSupply * _amount0Max / _inventory0 > type(uint256).max
+    ///     _totalSupply * _amount1Max / _inventory1 > type(uint256).max
+    /// This is okay because it only blocks deposit (not withdraw). Can also workaround by depositing smaller amounts
+    // ✅
+    function _computeLPShares(
+        uint256 _totalSupply,
+        uint256 _inventory0,
+        uint256 _inventory1,
+        uint256 _amount0Max,
+        uint256 _amount1Max,
+        uint160 _sqrtPriceX96
+    )
+        internal
+        pure
+        returns (
+            uint256 shares,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        // If total supply > 0, pool can't be empty
+        assert(_totalSupply == 0 || _inventory0 != 0 || _inventory1 != 0);
+
+        if (_totalSupply == 0) {
+            // For first deposit, enforce 50/50 ratio manually
+            uint224 priceX96 = uint224(FullMath.mulDiv(_sqrtPriceX96, _sqrtPriceX96, Q96));
+            amount0 = FullMath.mulDiv(_amount1Max, Q96, priceX96);
+
+            if (amount0 < _amount0Max) {
+                amount1 = _amount1Max;
+                shares = amount1;
+            } else {
+                amount0 = _amount0Max;
+                amount1 = FullMath.mulDiv(amount0, priceX96, Q96);
+                shares = amount0;
+            }
+        } else if (_inventory0 == 0) {
+            amount1 = _amount1Max;
+            shares = FullMath.mulDiv(amount1, _totalSupply, _inventory1);
+        } else if (_inventory1 == 0) {
+            amount0 = _amount0Max;
+            shares = FullMath.mulDiv(amount0, _totalSupply, _inventory0);
+        } else {
+            // The branches of this ternary are logically identical, but must be separate to avoid overflow
+            bool cond = _inventory0 < _inventory1
+                ? FullMath.mulDiv(_amount1Max, _inventory0, _inventory1) < _amount0Max
+                : _amount1Max < FullMath.mulDiv(_amount0Max, _inventory1, _inventory0);
+
+            if (cond) {
+                amount1 = _amount1Max;
+                amount0 = FullMath.mulDiv(amount1, _inventory0, _inventory1);
+                shares = FullMath.mulDiv(amount1, _totalSupply, _inventory1);
+            } else {
+                amount0 = _amount0Max;
+                amount1 = FullMath.mulDiv(amount0, _inventory1, _inventory0);
+                shares = FullMath.mulDiv(amount0, _totalSupply, _inventory0);
+            }
+        }
     }
 }
