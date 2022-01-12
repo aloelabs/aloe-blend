@@ -368,13 +368,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     }
 
     function recenter(
-        RebalanceCache memory cache,
+        RebalanceCache memory _cache,
         Uniswap.Position memory _primary,
-        uint256 inventory0,
-        uint256 inventory1
+        uint256 _inventory0,
+        uint256 _inventory1
     ) private returns (Uniswap.Position memory) {
-        uint256 sigma = volatilityOracle.estimate24H(UNI_POOL, cache.sqrtPriceX96, cache.tick);
-        cache.w = _computeNextPositionWidth(sigma);
+        uint256 sigma = volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick);
+        _cache.w = _computeNextPositionWidth(sigma);
 
         // Exit primary Uniswap position
         {
@@ -386,8 +386,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         // Compute amounts that should be placed in new Uniswap position
         uint256 amount0;
         uint256 amount1;
-        cache.w = cache.w >> 1;
-        (cache.magic, amount0, amount1) = _computeMagicAmounts(inventory0, inventory1, cache.priceX96, cache.w);
+        _cache.w = _cache.w >> 1;
+        (_cache.magic, amount0, amount1) = _computeMagicAmounts(_inventory0, _inventory1, _cache.priceX96, _cache.w);
 
         uint256 balance0 = _balance0();
         uint256 balance1 = _balance1();
@@ -400,19 +400,19 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         if (!hasExcessToken1) silo1.delegate_withdraw(amount1 - balance1);
 
         // Update primary position's ticks
-        _primary.lower = TickMath.floor(cache.tick - int24(cache.w), TICK_SPACING);
-        _primary.upper = TickMath.ceil(cache.tick + int24(cache.w), TICK_SPACING);
+        _primary.lower = TickMath.floor(_cache.tick - int24(_cache.w), TICK_SPACING);
+        _primary.upper = TickMath.ceil(_cache.tick + int24(_cache.w), TICK_SPACING);
         if (_primary.lower < TickMath.MIN_TICK) _primary.lower = TickMath.MIN_TICK;
         if (_primary.upper > TickMath.MAX_TICK) _primary.upper = TickMath.MAX_TICK;
 
         // Place some liquidity in Uniswap
-        (amount0, amount1) = _primary.deposit(_primary.liquidityForAmounts(cache.sqrtPriceX96, amount0, amount1));
+        (amount0, amount1) = _primary.deposit(_primary.liquidityForAmounts(_cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into silos
         if (hasExcessToken0) silo0.delegate_deposit(balance0 - amount0);
         if (hasExcessToken1) silo1.delegate_deposit(balance1 - amount1);
 
-        emit Recenter(_primary.lower, _primary.upper, cache.magic);
+        emit Recenter(_primary.lower, _primary.upper, _cache.magic);
         return _primary;
     }
 
@@ -682,14 +682,15 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     // ⬆️⬆️⬆️⬆️ VIEW FUNCTIONS ⬆️⬆️⬆️⬆️  ------------------------------------------------------------------------------
     // ⬇️⬇️⬇️⬇️ PURE FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
 
-    /// @dev Computes position width based on sigma (volatility)
-    function _computeNextPositionWidth(uint256 sigma) internal pure returns (uint24) {
-        if (sigma <= 5.024579e15) return MIN_WIDTH;
-        if (sigma >= 3.000058e17) return MAX_WIDTH;
-        sigma *= B; // scale by a constant factor to increase confidence
+    /// @dev Computes position width based on volatility. Doesn't revert
+    // ✅
+    function _computeNextPositionWidth(uint256 _sigma) internal pure returns (uint24) {
+        if (_sigma <= 1.00481445e16) return MIN_WIDTH;
+        if (_sigma >= 4.41180492e17) return MAX_WIDTH;
+        _sigma *= B; // scale by a constant factor to increase confidence
 
         unchecked {
-            uint160 ratio = uint160((Q96 * (1e18 + sigma)) / (1e18 - sigma));
+            uint160 ratio = uint160((Q96 * (1e18 + _sigma)) / (1e18 - _sigma));
             return uint24(TickMath.getTickAtSqrtRatio(ratio)) >> 1;
         }
     }
@@ -698,10 +699,10 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// Doesn't revert as long as MIN_WIDTH <= _halfWidth * 2 <= MAX_WIDTH
     // ✅
     function _computeMagicAmounts(
-        uint256 inventory0,
-        uint256 inventory1,
-        uint224 priceX96,
-        uint24 halfWidth
+        uint256 _inventory0,
+        uint256 _inventory1,
+        uint224 _priceX96,
+        uint24 _halfWidth
     )
         internal
         pure
@@ -711,13 +712,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             uint256 amount1
         )
     {
-        magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-int24(halfWidth)));
-        if (FullMath.mulDiv(inventory0, priceX96, Q96) > inventory1) {
-            amount1 = FullMath.mulDiv(inventory1, magic, Q96);
-            amount0 = FullMath.mulDiv(amount1, Q96, priceX96);
+        magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-int24(_halfWidth)));
+        if (FullMath.mulDiv(_inventory0, _priceX96, Q96) > _inventory1) {
+            amount1 = FullMath.mulDiv(_inventory1, magic, Q96);
+            amount0 = FullMath.mulDiv(amount1, Q96, _priceX96);
         } else {
-            amount0 = FullMath.mulDiv(inventory0, magic, Q96);
-            amount1 = FullMath.mulDiv(amount0, priceX96, Q96);
+            amount0 = FullMath.mulDiv(_inventory0, magic, Q96);
+            amount1 = FullMath.mulDiv(amount0, _priceX96, Q96);
         }
     }
 

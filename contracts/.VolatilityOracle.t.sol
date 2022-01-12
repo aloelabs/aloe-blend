@@ -30,12 +30,9 @@ contract VolatilityOracleTest is DSTest {
 
     function test_cacheMetadataFor() public {
         volatilityOracle.cacheMetadataFor(pool);
-        (
-            uint32 maxSecondsAgo,
-            uint24 gamma0,
-            uint24 gamma1,
-            int24 tickSpacing
-        ) = volatilityOracle.cachedPoolMetadata(address(pool));
+        (uint32 maxSecondsAgo, uint24 gamma0, uint24 gamma1, int24 tickSpacing) = volatilityOracle.cachedPoolMetadata(
+            address(pool)
+        );
 
         assertEq(maxSecondsAgo, 118982);
         assertEq(gamma0, 100);
@@ -58,7 +55,10 @@ contract VolatilityOracleTest is DSTest {
         uint256 IV = volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
         assertEq(IV, 41376993386267);
 
-        (uint256 feeGrowthGlobal0, uint256 feeGrowthGlobal1, uint256 timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), 1);
+        (uint256 feeGrowthGlobal0, uint256 feeGrowthGlobal1, uint256 timestamp) = volatilityOracle.feeGrowthGlobals(
+            address(pool),
+            1
+        );
         assertEq(feeGrowthGlobal0, 785983140346722755185121678846038);
         assertEq(feeGrowthGlobal1, 782243160630302075618982773013645);
         assertEq(timestamp, 1639531906);
