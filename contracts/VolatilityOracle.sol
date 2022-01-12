@@ -82,49 +82,49 @@ contract VolatilityOracle is IVolatilityOracle {
     }
 
     function _estimate24H(
-        IUniswapV3Pool pool,
-        uint160 sqrtPriceX96,
-        int24 tick,
-        Volatility.FeeGrowthGlobals memory previous
+        IUniswapV3Pool _pool,
+        uint160 _sqrtPriceX96,
+        int24 _tick,
+        Volatility.FeeGrowthGlobals memory _previous
     ) private view returns (uint256 IV, Volatility.FeeGrowthGlobals memory current) {
-        Volatility.PoolMetadata memory poolMetadata = cachedPoolMetadata[address(pool)];
+        Volatility.PoolMetadata memory poolMetadata = cachedPoolMetadata[address(_pool)];
 
         uint32 secondsAgo = poolMetadata.maxSecondsAgo;
         if (secondsAgo > 1 days) secondsAgo = 1 days;
         // Throws if secondsAgo == 0
-        (int24 arithmeticMeanTick, uint160 secondsPerLiquidityX128) = Oracle.consult(pool, secondsAgo);
+        (int24 arithmeticMeanTick, uint160 secondsPerLiquidityX128) = Oracle.consult(_pool, secondsAgo);
 
         current = Volatility.FeeGrowthGlobals(
-            pool.feeGrowthGlobal0X128(),
-            pool.feeGrowthGlobal1X128(),
+            _pool.feeGrowthGlobal0X128(),
+            _pool.feeGrowthGlobal1X128(),
             uint32(block.timestamp)
         );
         IV = Volatility.estimate24H(
             poolMetadata,
             Volatility.PoolData(
-                sqrtPriceX96,
-                tick,
+                _sqrtPriceX96,
+                _tick,
                 arithmeticMeanTick,
                 secondsPerLiquidityX128,
                 secondsAgo,
-                pool.liquidity()
+                _pool.liquidity()
             ),
-            previous,
+            _previous,
             current
         );
     }
 
-    function _pickReadIndex(IUniswapV3Pool pool, Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal)
+    function _pickReadIndex(IUniswapV3Pool _pool, Volatility.FeeGrowthGlobals[25] storage _feeGrowthGlobal)
         private
         view
         returns (uint8)
     {
-        uint8 readIndex = feeGrowthGlobalsReadIndex[address(pool)];
-        uint32 timingError = _timingError(block.timestamp - feeGrowthGlobal[readIndex].timestamp);
+        uint8 readIndex = feeGrowthGlobalsReadIndex[address(_pool)];
+        uint32 timingError = _timingError(block.timestamp - _feeGrowthGlobal[readIndex].timestamp);
 
         for (uint8 counter = readIndex + 1; counter < readIndex + 25; counter++) {
             uint8 newReadIndex = counter % 25;
-            uint32 newTimingError = _timingError(block.timestamp - feeGrowthGlobal[newReadIndex].timestamp);
+            uint32 newTimingError = _timingError(block.timestamp - _feeGrowthGlobal[newReadIndex].timestamp);
 
             if (newTimingError < timingError) {
                 readIndex = newReadIndex;
@@ -135,7 +135,7 @@ contract VolatilityOracle is IVolatilityOracle {
         return readIndex;
     }
 
-    function _timingError(uint256 age) private pure returns (uint32) {
-        return uint32(age < 24 hours ? 24 hours - age : age - 24 hours);
+    function _timingError(uint256 _age) private pure returns (uint32) {
+        return uint32(_age < 24 hours ? 24 hours - _age : _age - 24 hours);
     }
 }

@@ -34,10 +34,10 @@ interface IAloeBlendState {
     /// @notice The amount of token1 that was in silo1 last time maintenanceBudget1 was updated
     function silo1Basis() external view returns (uint256);
 
-    /// @notice The amount of token0 available for things like `rebalance()` rewards
+    /// @notice The amount of token0 available for `rebalance()` rewards
     function maintenanceBudget0() external view returns (uint256);
 
-    /// @notice The amount of token1 available for things like `rebalance()` rewards
+    /// @notice The amount of token1 available for `rebalance()` rewards
     function maintenanceBudget1() external view returns (uint256);
 
     /**
