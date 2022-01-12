@@ -218,11 +218,25 @@ contract AloeBlendTest is DSTest {
         assertEq(shares, 20000000);
         assertEq(amount0, 10000000);
         assertEq(amount1, 20000000);
-        (shares, amount0, amount1) = blend.computeLPShares(20000000, 10000000, 20000000, 20000000, 40000000, 1.120455419e29);
+        (shares, amount0, amount1) = blend.computeLPShares(
+            20000000,
+            10000000,
+            20000000,
+            20000000,
+            40000000,
+            1.120455419e29
+        );
         assertEq(shares, 40000000);
         assertEq(amount0, 20000000);
         assertEq(amount1, 40000000);
-        (shares, amount0, amount1) = blend.computeLPShares(60000000, 30000000, 60000000, 20000000, 40000000, 1.58456325e29);
+        (shares, amount0, amount1) = blend.computeLPShares(
+            60000000,
+            30000000,
+            60000000,
+            20000000,
+            40000000,
+            1.58456325e29
+        );
         assertEq(shares, 40000000);
         assertEq(amount0, 20000000);
         assertEq(amount1, 40000000);

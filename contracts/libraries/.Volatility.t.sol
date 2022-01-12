@@ -6,9 +6,7 @@ import "ds-test/test.sol";
 import "./Volatility.sol";
 
 contract VolatilityTest is DSTest {
-
-    function setUp() public {
-    }
+    function setUp() public {}
 
     function test_spec_estimate24H() public {
         Volatility.PoolMetadata memory metadata = Volatility.PoolMetadata(3600, 3000, 3000, 60);
@@ -39,11 +37,7 @@ contract VolatilityTest is DSTest {
         dailyIV = Volatility.estimate24H(
             metadata,
             data,
-            Volatility.FeeGrowthGlobals(
-                0,
-                0,
-                0
-            ),
+            Volatility.FeeGrowthGlobals(0, 0, 0),
             Volatility.FeeGrowthGlobals(
                 1501968291161650295867029090958139,
                 527315901327546020416261134123578344760082,
@@ -132,16 +126,8 @@ contract VolatilityTest is DSTest {
         Volatility.estimate24H(
             metadata,
             data,
-            Volatility.FeeGrowthGlobals(
-                a,
-                b,
-                0
-            ),
-            Volatility.FeeGrowthGlobals(
-                uint256(a) + uint256(c),
-                uint256(b) + uint256(d),
-                7777
-            )
+            Volatility.FeeGrowthGlobals(a, b, 0),
+            Volatility.FeeGrowthGlobals(uint256(a) + uint256(c), uint256(b) + uint256(d), 7777)
         );
     }
 
@@ -169,10 +155,10 @@ contract VolatilityTest is DSTest {
         }
         if (amount0 < 1e6) return;
 
-        uint256 priceX96Actual = FullMath.mulDiv(amount1, 2 ** 96, amount0);
+        uint256 priceX96Actual = FullMath.mulDiv(amount1, 2**96, amount0);
 
         uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(tick);
-        uint256 priceX96Expected = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, 2 ** 96);
+        uint256 priceX96Expected = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, 2**96);
 
         if (-30000 < tick && tick < 30000) {
             assertLe(priceX96Actual / priceX96Expected, 1);
