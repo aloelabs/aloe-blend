@@ -73,13 +73,20 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     ISilo public immutable silo1;
 
     struct PackedSlot {
-        int24 primaryLower; // The primary position's lower tick bound
-        int24 primaryUpper; // The primary position's upper tick bound
-        int24 limitLower; // The limit order's lower tick bound
-        int24 limitUpper; // The limit order's upper tick bound
-        uint48 recenterTimestamp; // The `block.timestamp` from the last time the primary position moved
-        bool maintenanceIsSustainable; // Whether `maintenanceBudget0` or `maintenanceBudget1` is filled up
-        bool locked; // Whether the vault is currently locked to reentrancy
+        // The primary position's lower tick bound
+        int24 primaryLower;
+        // The primary position's upper tick bound
+        int24 primaryUpper;
+        // The limit order's lower tick bound
+        int24 limitLower;
+        // The limit order's upper tick bound
+        int24 limitUpper;
+        // The `block.timestamp` from the last time the primary position moved
+        uint48 recenterTimestamp;
+        // Whether `maintenanceBudget0` or `maintenanceBudget1` is filled up
+        bool maintenanceIsSustainable;
+        // Whether the vault is currently locked to reentrancy
+        bool locked;
     }
 
     /// @inheritdoc IAloeBlendState
@@ -158,10 +165,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         silo0.delegate_poke();
         silo1.delegate_poke();
 
-        // Fetch instantaneous price from Uniswap
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
-
-        (uint256 inventory0, uint256 inventory1) = getInventory();
+        (uint256 inventory0, uint256 inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
         (shares, amount0, amount1) = _computeLPShares(
             totalSupply,
             inventory0,
@@ -294,17 +299,23 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         (cache.sqrtPriceX96, cache.tick, , , , , ) = UNI_POOL.slot0();
         cache.priceX96 = uint224(FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, Q96));
         // Get rebalance urgency (based on time elapsed since previous rebalance)
-        cache.urgency = getRebalanceUrgency();
+        cache.urgency = _getRebalanceUrgency(recenterTimestamp);
 
-        (uint128 liquidity, , , , ) = limit.info();
-        limit.withdraw(liquidity);
+        // Poke silos to ensure reported balances are correct
+        silo0.delegate_poke();
+        silo1.delegate_poke();
 
-        (uint256 inventory0, uint256 inventory1, uint256 fluid0, uint256 fluid1) = _getInventory(
+        // Check inventory
+        (uint256 inventory0, uint256 inventory1, InventoryDetails memory d) = _getInventory(
             primary,
             limit,
-            cache.sqrtPriceX96,
-            false
+            cache.sqrtPriceX96
         );
+
+        // Remove the limit order if it exists
+        if (d.limitLiquidity != 0) limit.withdraw(d.limitLiquidity);
+
+        // Compute inventory ratio to determine what happens next
         uint256 ratio = FullMath.mulDiv(
             10_000,
             inventory0,
@@ -319,7 +330,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             // works for small tickSpacing. Also have to constrain to fluid1 since we're not yet withdrawing from
             // primary Uniswap position.
             uint256 amount1 = (inventory1 - FullMath.mulDiv(inventory0, cache.priceX96, Q96)) >> 1;
-            if (amount1 > fluid1) amount1 = fluid1;
+            if (amount1 > d.fluid1) amount1 = d.fluid1;
             // Withdraw requisite amount from silo
             uint256 balance1 = _balance1();
             if (balance1 < amount1) silo1.delegate_withdraw(amount1 - balance1);
@@ -333,7 +344,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             // works for small tickSpacing. Also have to constrain to fluid0 since we're not yet withdrawing from
             // primary Uniswap position.
             uint256 amount0 = (inventory0 - FullMath.mulDiv(inventory1, Q96, cache.priceX96)) >> 1;
-            if (amount0 > fluid0) amount0 = fluid0;
+            if (amount0 > d.fluid0) amount0 = d.fluid0;
             // Withdraw requisite amount from silo
             uint256 balance0 = _balance0();
             if (balance0 < amount0) silo0.delegate_withdraw(amount0 - balance0);
@@ -558,50 +569,112 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     /// @inheritdoc IAloeBlendDerivedState
     function getRebalanceUrgency() public view returns (uint32 urgency) {
-        urgency = uint32(FullMath.mulDiv(10_000, block.timestamp - packedSlot.recenterTimestamp, RECENTERING_INTERVAL));
+        urgency = _getRebalanceUrgency(packedSlot.recenterTimestamp);
+    }
+
+    /**
+     * @notice Reports how badly the vault wants its `rebalance()` function to be called. Proportional to time
+     * elapsed since the primary position last moved.
+     * @dev Since `RECENTERING_INTERVAL` is 86400 seconds, urgency is guaranteed to be nonzero unless the primary
+     * position is moved more than once in a single block.
+     * @param _recenterTimestamp The `block.timestamp` from the last time the primary position moved
+     * @return urgency How badly the vault wants its `rebalance()` function to be called
+     */
+    function _getRebalanceUrgency(uint48 _recenterTimestamp) private view returns (uint32 urgency) {
+        urgency = uint32(FullMath.mulDiv(100_000, block.timestamp - _recenterTimestamp, RECENTERING_INTERVAL));
     }
 
     /// @inheritdoc IAloeBlendDerivedState
     function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
-        (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
         (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
-        (inventory0, inventory1, , ) = _getInventory(primary, limit, sqrtPriceX96, true);
+        (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
+        (inventory0, inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
     }
 
+    struct InventoryDetails {
+        // The amount of token0 available to limit order, i.e. everything *not* in the primary position
+        uint256 fluid0;
+        // The amount of token1 available to limit order, i.e. everything *not* in the primary position
+        uint256 fluid1;
+        // The liquidity present in the primary position. Note that this may be higher than what the
+        // vault deposited since someone may designate this contract as a `mint()` recipient
+        uint128 primaryLiquidity;
+        // The liquidity present in the limit order. Note that this may be higher than what the
+        // vault deposited since someone may designate this contract as a `mint()` recipient
+        uint128 limitLiquidity;
+    }
+
+    /**
+     * @notice Estimate's the vault's liabilities to users -- in other words, how much would be paid out if all
+     * holders redeemed their LP tokens at once.
+     * @dev Underestimates the true payout unless both silos and Uniswap positions have just been poked. Also
+     * assumes that the maximum amount will accrue to the maintenance budget during the next `rebalance()`. If
+     * it takes less than that for the budget to reach capacity, then the values reported here may increase after
+     * calling `rebalance()`.
+     * @param _primary The primary position
+     * @param _limit The limit order; if inactive, `_limit.lower` should equal `_limit.upper`
+     * @param _sqrtPriceX96 The current sqrt(price) of the Uniswap pair from `slot0()`
+     * @return inventory0 The amount of token0 underlying all LP tokens
+     * @return inventory1 The amount of token1 underlying all LP tokens
+     * @return d A struct containing details that may be relevant to other functions. We return it here to avoid
+     * reloading things from external storage (saves gas).
+     */
     function _getInventory(
-        Uniswap.Position memory primary,
-        Uniswap.Position memory limit,
-        uint160 sqrtPriceX96,
-        bool includeLimit
+        Uniswap.Position memory _primary,
+        Uniswap.Position memory _limit,
+        uint160 _sqrtPriceX96
     )
         private
         view
         returns (
             uint256 inventory0,
             uint256 inventory1,
-            uint256 availableForLimit0,
-            uint256 availableForLimit1
+            InventoryDetails memory d
         )
     {
-        if (includeLimit) {
-            (availableForLimit0, availableForLimit1, ) = limit.collectableAmountsAsOfLastPoke(sqrtPriceX96);
+        uint256 a;
+        uint256 b;
+
+        // Limit order
+        if (_limit.lower != _limit.upper) {
+            (d.limitLiquidity, , , a, b) = _limit.info();
+            (d.fluid0, d.fluid1) = _limit.amountsForLiquidity(_sqrtPriceX96, d.limitLiquidity);
+            // Earnings from limit order don't get added to maintenance budget
+            d.fluid0 += a;
+            d.fluid1 += b;
         }
-        // Everything in silos + everything in the contract, except maintenance budget
-        availableForLimit0 += silo0.balanceOf(address(this)) + _balance0();
-        availableForLimit1 += silo1.balanceOf(address(this)) + _balance1();
-        // Everything in primary Uniswap position. Limit order is placed without moving this, so its
-        // amounts don't get added to availableForLimitX.
-        (inventory0, inventory1, ) = primary.collectableAmountsAsOfLastPoke(sqrtPriceX96);
-        inventory0 += availableForLimit0;
-        inventory1 += availableForLimit1;
+
+        // token0 from contract + silo0
+        a = silo0Basis;
+        b = silo0.balanceOf(address(this));
+        a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
+        d.fluid0 += _balance0() + b - a;
+
+        // token1 from contract + silo1
+        a = silo1Basis;
+        b = silo1.balanceOf(address(this));
+        a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
+        d.fluid1 += _balance1() + b - a;
+
+        // Primary position; limit order is placed without touching this, so its amounts aren't included in `fluid`
+        if (_primary.lower != _primary.upper) {
+            (d.primaryLiquidity, , , a, b) = _primary.info();
+            (inventory0, inventory1) = _primary.amountsForLiquidity(_sqrtPriceX96, d.primaryLiquidity);
+
+            inventory0 += d.fluid0 + a - a / MAINTENANCE_FEE;
+            inventory1 += d.fluid1 + b - b / MAINTENANCE_FEE;
+        } else {
+            inventory0 = d.fluid0;
+            inventory1 = d.fluid1;
+        }
     }
 
-    /// @dev TODO
+    /// @dev The amount of token0 in the contract that's not in maintenanceBudget0
     function _balance0() private view returns (uint256) {
         return TOKEN0.balanceOf(address(this)) - maintenanceBudget0;
     }
 
-    /// @dev TODO
+    /// @dev The amount of token1 in the contract that's not in maintenanceBudget1
     function _balance1() private view returns (uint256) {
         return TOKEN1.balanceOf(address(this)) - maintenanceBudget1;
     }
