@@ -9,6 +9,8 @@ import "./TickMath.sol";
 
 library Uniswap {
     struct Position {
+        // The pool the position is in
+        IUniswapV3Pool pool;
         // Lower tick of the position
         int24 lower;
         // Upper tick of the position
@@ -16,28 +18,23 @@ library Uniswap {
     }
 
     /// @dev Do zero-burns to poke the Uniswap pools so earned fees are updated
-    function poke(Position memory position, IUniswapV3Pool pool) internal {
-        (uint128 liquidity, , , , ) = info(position, pool);
-        if (liquidity == 0) return;
-        pool.burn(position.lower, position.upper, 0);
+    function poke(Position memory position) internal {
+        if (position.lower == position.upper) return;
+        (uint128 liquidity, , , , ) = info(position);
+        if (liquidity != 0) {
+            position.pool.burn(position.lower, position.upper, 0);
+        }
     }
 
     /// @dev Deposits liquidity in a range on the Uniswap pool.
-    function deposit(
-        Position memory position,
-        IUniswapV3Pool pool,
-        uint128 liquidity
-    ) internal {
-        if (liquidity == 0) return;
-        pool.mint(address(this), position.lower, position.upper, liquidity, "");
+    function deposit(Position memory position, uint128 liquidity) internal returns (uint256 amount0, uint256 amount1) {
+        if (liquidity != 0) {
+            (amount0, amount1) = position.pool.mint(address(this), position.lower, position.upper, liquidity, "");
+        }
     }
 
-    /// @dev Withdraws liquidity and collects all fees
-    function withdraw(
-        Position memory position,
-        IUniswapV3Pool pool,
-        uint128 liquidity
-    )
+    /// @dev Withdraws all liquidity and collects all fees
+    function withdraw(Position memory position, uint128 liquidity)
         internal
         returns (
             uint256 burned0,
@@ -46,10 +43,12 @@ library Uniswap {
             uint256 earned1
         )
     {
-        (burned0, burned1) = pool.burn(position.lower, position.upper, liquidity);
+        if (liquidity != 0) {
+            (burned0, burned1) = position.pool.burn(position.lower, position.upper, liquidity);
+        }
 
         // Collect all owed tokens including earned fees
-        (uint256 collected0, uint256 collected1) = pool.collect(
+        (uint256 collected0, uint256 collected1) = position.pool.collect(
             address(this),
             position.lower,
             position.upper,
@@ -67,19 +66,25 @@ library Uniswap {
      * @notice Amounts of TOKEN0 and TOKEN1 held in vault's position. Includes
      * owed fees, except those accrued since last poke.
      */
-    function collectableAmountsAsOfLastPoke(
-        Position memory position,
-        IUniswapV3Pool pool,
-        uint160 sqrtPriceX96
-    ) internal view returns (uint256, uint256) {
-        (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position, pool);
+    function collectableAmountsAsOfLastPoke(Position memory position, uint160 sqrtPriceX96)
+        internal
+        view
+        returns (
+            uint256,
+            uint256,
+            uint128
+        )
+    {
+        if (position.lower == position.upper) return (0, 0, 0);
+
+        (uint128 liquidity, , , uint128 earnable0, uint128 earnable1) = info(position);
         (uint256 burnable0, uint256 burnable1) = amountsForLiquidity(position, sqrtPriceX96, liquidity);
 
-        return (burnable0 + earnable0, burnable1 + earnable1);
+        return (burnable0 + earnable0, burnable1 + earnable1, liquidity);
     }
 
     /// @dev Wrapper around `IUniswapV3Pool.positions()`.
-    function info(Position memory position, IUniswapV3Pool pool)
+    function info(Position memory position)
         internal
         view
         returns (
@@ -90,7 +95,7 @@ library Uniswap {
             uint128 // tokensOwed1
         )
     {
-        return pool.positions(keccak256(abi.encodePacked(address(this), position.lower, position.upper)));
+        return position.pool.positions(keccak256(abi.encodePacked(address(this), position.lower, position.upper)));
     }
 
     /// @dev Wrapper around `LiquidityAmounts.getAmountsForLiquidity()`.
