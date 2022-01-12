@@ -33,11 +33,14 @@ interface IVolatilityOracle {
      * @return feeGrowthGlobal1X128 Total pool revenue in token1, as of timestamp
      * @return timestamp The time at which snapshot was taken and stored
      */
-    function feeGrowthGlobals(address pool, uint256 idx) external view returns (
-        uint256 feeGrowthGlobal0X128,
-        uint256 feeGrowthGlobal1X128,
-        uint32 timestamp
-    );
+    function feeGrowthGlobals(address pool, uint256 idx)
+        external
+        view
+        returns (
+            uint256 feeGrowthGlobal0X128,
+            uint256 feeGrowthGlobal1X128,
+            uint32 timestamp
+        );
 
     /**
      * @notice Returns the index that was closest to 24 hours old last time
