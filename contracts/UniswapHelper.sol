@@ -10,13 +10,17 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 contract UniswapHelper is IUniswapV3MintCallback {
     using SafeERC20 for IERC20;
 
+    /// @notice The Uniswap pair in which the vault will manage positions
     IUniswapV3Pool public immutable UNI_POOL;
 
+    /// @notice The first token of the Uniswap pair
     IERC20 public immutable TOKEN0;
 
+    /// @notice The second token of the Uniswap pair
     IERC20 public immutable TOKEN1;
 
-    int24 public immutable TICK_SPACING;
+    /// @dev The Uniswap pair's tick spacing
+    int24 internal immutable TICK_SPACING;
 
     constructor(IUniswapV3Pool _pool) {
         UNI_POOL = _pool;
