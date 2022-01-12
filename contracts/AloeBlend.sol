@@ -86,6 +86,12 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     PackedSlot public packedSlot;
 
     /// @inheritdoc IAloeBlendState
+    uint256 public silo0Basis;
+
+    /// @inheritdoc IAloeBlendState
+    uint256 public silo1Basis;
+
+    /// @inheritdoc IAloeBlendState
     uint256 public maintenanceBudget0;
 
     /// @inheritdoc IAloeBlendState
@@ -187,27 +193,65 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         packedSlot.locked = true;
 
-        uint256 _totalSupply = totalSupply + 1;
-        uint256 temp0;
-        uint256 temp1;
+        // Poke silos to ensure reported balances are correct
+        silo0.delegate_poke();
+        silo1.delegate_poke();
 
-        // Portion from contract
-        // NOTE: Must be done FIRST to ensure we don't double count things after exiting Uniswap/silos
-        amount0 = FullMath.mulDiv(_balance0(), shares, _totalSupply);
-        amount1 = FullMath.mulDiv(_balance1(), shares, _totalSupply);
+        uint256 _totalSupply = totalSupply;
+        uint256 a;
+        uint256 b;
+        uint256 c;
+        uint256 d;
 
-        // Portion from Uniswap
-        (temp0, temp1) = _withdrawFractionFromUniswap(primary, limit, shares, _totalSupply);
-        amount0 += temp0;
-        amount1 += temp1;
+        // Compute user's portion of token0 from contract + silo0
+        c = _balance0();
+        a = silo0Basis;
+        b = silo0.balanceOf(address(this));
+        a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
+        amount0 = FullMath.mulDiv(c + b - a, shares, _totalSupply);
+        // Withdraw from silo0 if contract balance can't cover what user is owed
+        if (amount0 > c) {
+            c = a + amount0 - c;
+            silo0.delegate_withdraw(c);
+            maintenanceBudget0 += a;
+            silo0Basis = b - c;
+        }
 
-        // Portion from silos
-        temp0 = FullMath.mulDiv(silo0.balanceOf(address(this)), shares, _totalSupply);
-        temp1 = FullMath.mulDiv(silo1.balanceOf(address(this)), shares, _totalSupply);
-        silo0.delegate_withdraw(temp0);
-        silo1.delegate_withdraw(temp1);
-        amount0 += temp0;
-        amount1 += temp1;
+        // Compute user's portion of token1 from contract + silo1
+        c = _balance1();
+        a = silo1Basis;
+        b = silo1.balanceOf(address(this));
+        a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
+        amount1 = FullMath.mulDiv(c + b - a, shares, _totalSupply);
+        // Withdraw from silo1 if contract balance can't cover what user is owed
+        if (amount1 > c) {
+            c = a + amount1 - c;
+            silo1.delegate_withdraw(c);
+            maintenanceBudget1 += a;
+            silo1Basis = b - c;
+        }
+
+        // Withdraw user's portion of the primary position
+        {
+            (uint128 liquidity, , , , ) = primary.info();
+            (a, b, c, d) = primary.withdraw(uint128(FullMath.mulDiv(liquidity, shares, _totalSupply)));
+            amount0 += a;
+            amount1 += b;
+            a = c / MAINTENANCE_FEE;
+            b = d / MAINTENANCE_FEE;
+            amount0 += FullMath.mulDiv(c - a, shares, _totalSupply);
+            amount1 += FullMath.mulDiv(d - b, shares, _totalSupply);
+            maintenanceBudget0 += a;
+            maintenanceBudget1 += b;
+        }
+
+        // Withdraw user's portion of the limit order
+        if (limit.lower != limit.upper) {
+            (uint128 liquidity, , , , ) = limit.info();
+            (a, b, c, d) = limit.withdraw(uint128(FullMath.mulDiv(liquidity, shares, _totalSupply)));
+            amount0 += a + FullMath.mulDiv(c, shares, _totalSupply);
+            amount1 += b + FullMath.mulDiv(d, shares, _totalSupply);
+        }
 
         // Check constraints
         require(amount0 >= amount0Min, "Aloe: amount0 too low");
@@ -389,40 +433,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
         emit Recenter(_primary.lower, _primary.upper, cache.magic);
         return _primary;
-    }
-
-    /// @dev Withdraws fraction of liquidity from Uniswap, but collects *all* fees from it
-    function _withdrawFractionFromUniswap(
-        Uniswap.Position memory primary,
-        Uniswap.Position memory limit,
-        uint256 numerator,
-        uint256 denominator
-    ) private returns (uint256 amount0, uint256 amount1) {
-        assert(numerator < denominator);
-        // Primary Uniswap position
-        Uniswap.Position memory _primary = primary;
-        (uint128 liquidity, , , , ) = _primary.info();
-        liquidity = uint128(FullMath.mulDiv(liquidity, numerator, denominator));
-
-        uint256 earned0;
-        uint256 earned1;
-        (amount0, amount1, earned0, earned1) = _primary.withdraw(liquidity);
-        (earned0, earned1) = _earmarkSomeForMaintenance(earned0, earned1);
-
-        // --> Add share of earned fees
-        amount0 += FullMath.mulDiv(earned0, numerator, denominator);
-        amount1 += FullMath.mulDiv(earned1, numerator, denominator);
-
-        // Limit Uniswap position
-        Uniswap.Position memory _limit = limit;
-        (liquidity, , , , ) = _limit.info();
-        liquidity = uint128(FullMath.mulDiv(liquidity, numerator, denominator));
-
-        if (liquidity != 0) {
-            (uint256 temp0, uint256 temp1, , ) = _limit.withdraw(liquidity);
-            amount0 += temp0;
-            amount1 += temp1;
-        }
     }
 
     /// @dev Earmark some earned fees for maintenance, according to `maintenanceFee`. Return what's leftover
