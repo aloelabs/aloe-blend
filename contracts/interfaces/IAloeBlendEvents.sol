@@ -6,7 +6,7 @@ interface IAloeBlendEvents {
 
     event Withdraw(address indexed sender, uint256 shares, uint256 amount0, uint256 amount1);
 
-    event Rebalance(uint32 urgency, uint256 ratio, uint256 shares, uint256 inventory0, uint256 inventory1);
+    event Rebalance(uint256 ratio, uint256 shares, uint256 inventory0, uint256 inventory1);
 
     event Recenter(int24 lower, int24 upper);
 
