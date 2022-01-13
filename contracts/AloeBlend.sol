@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -63,14 +63,14 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /// @inheritdoc IAloeBlendImmutables
     uint8 public constant MAINTENANCE_FEE = 10; // 1/10th of earnings from primary Uniswap position
 
-    /// TODO
+    /// @inheritdoc IAloeBlendImmutables
     uint256 public constant FLOAT_PERCENTAGE = 500; // 5% of inventory sits in contract to cheapen small withdrawals
 
-    /// TODO
-    int24 public immutable MIN_TICK;
+    /// @dev The minimum tick that can serve as a position boundary in the Uniswap pool
+    int24 private immutable MIN_TICK;
 
-    /// TODO
-    int24 public immutable MAX_TICK;
+    /// @dev The maximum tick that can serve as a position boundary in the Uniswap pool
+    int24 private immutable MAX_TICK;
 
     /// @inheritdoc IAloeBlendImmutables
     IVolatilityOracle public immutable volatilityOracle;
@@ -379,14 +379,30 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             recenterTimestamp = uint48(block.timestamp);
         }
 
-        maintenanceIsSustainable = _rewardCaller(rewardToken, urgency, gas);
+        maintenanceIsSustainable = _rewardCaller(rewardToken, urgency, gas, maintenanceIsSustainable);
         emit Rebalance(ratio, totalSupply, inventory0, inventory1);
-        _unlockAndStorePackedSlot(primary, limit, recenterTimestamp, maintenanceIsSustainable);
+        packedSlot = PackedSlot(
+            primary.lower,
+            primary.upper,
+            limit.lower,
+            limit.upper,
+            recenterTimestamp,
+            maintenanceIsSustainable,
+            false
+        );
     }
 
     /**
-     * Assume limit order is exited
-     * Assume inventory is strictly underestimated
+     * @notice Recenters the primary Uniswap position around the current tick. Deposits leftover funds into the silos.
+     * @dev This function assumes that the limit order has no liquidity (never existed or already exited)
+     * @param _cache The rebalance cache, populated with *at least* sqrtPriceX96, priceX96, and tick
+     * @param _primary The existing primary Uniswap position
+     * @param _primaryLiquidity The amount of liquidity currently in `_primary`
+     * @param _inventory0 The amount of token0 underlying all LP tokens. MUST BE <= THE TRUE VALUE. No overestimates!
+     * @param _inventory1 The amount of token1 underlying all LP tokens. MUST BE <= THE TRUE VALUE. No overestimates!
+     * @param _maintenanceIsSustainable Whether `maintenanceBudget0` or `maintenanceBudget1` has filled up according to
+     * `K` -- if false, position width is maximized rather than scaling with volatility
+     * @return Uniswap.Position memory `_primary` updated with new lower and upper tick bounds
      */
     function _recenter(
         RebalanceCache memory _cache,
@@ -403,11 +419,12 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             maintenanceBudget1 += earned1 / MAINTENANCE_FEE;
         }
 
-        // Decide primary position width
+        // Decide primary position width...
         uint24 w = _maintenanceIsSustainable
             ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick))
             : MAX_WIDTH;
         w = w >> 1;
+        // ...and compute amounts that should be placed inside
         (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, _cache.priceX96, w);
 
         // If contract balance (leaving out the float) is insufficient, withdraw from silos
@@ -447,15 +464,27 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         return _primary;
     }
 
+    /**
+     * @notice Sends some `_rewardToken` to `msg.sender` as a reward for calling rebalance
+     * @param _rewardToken The ERC20 token in which the reward should be denominated. If `rewardToken` is the 0
+     * address, no reward will be given.
+     * @param _urgency How critical it is that rebalance gets called right now. Nominal value is 100000
+     * @param _gas How much gas was used for core rebalance logic
+     * @param _maintenanceIsSustainable Whether the most recently-used maintenance budget was filled up after the
+     * last rebalance
+     * @return bool If `_rewardToken` is token0 or token1, return whether the maintenance budget will remain full
+     * after sending reward. If `_rewardToken` is something else, return previous _maintenanceIsSustainable value
+     */
     function _rewardCaller(
         address _rewardToken,
         uint32 _urgency,
-        uint32 _gas
-    ) private returns (bool maintenanceIsSustainable) {
+        uint32 _gas,
+        bool _maintenanceIsSustainable
+    ) private returns (bool) {
         // Short-circuit if the caller doesn't want to be rewarded
         if (_rewardToken == address(0)) {
             emit Reward(address(0), 0, _urgency);
-            return false;
+            return _maintenanceIsSustainable;
         }
 
         // Otherwise, do math
@@ -469,16 +498,16 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             budget -= reward;
 
             uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
-            maintenanceIsSustainable = budget > maxBudget;
-            maintenanceBudget0 = maintenanceIsSustainable ? maxBudget : budget;
+            _maintenanceIsSustainable = budget > maxBudget;
+            maintenanceBudget0 = _maintenanceIsSustainable ? maxBudget : budget;
         } else if (_rewardToken == address(TOKEN1)) {
             uint256 budget = maintenanceBudget1;
             if (reward > budget || rewardPerGas == 0) reward = budget;
             budget -= reward;
 
             uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
-            maintenanceIsSustainable = budget > maxBudget;
-            maintenanceBudget1 = maintenanceIsSustainable ? maxBudget : budget;
+            _maintenanceIsSustainable = budget > maxBudget;
+            maintenanceBudget1 = _maintenanceIsSustainable ? maxBudget : budget;
         } else {
             uint256 budget = IERC20(_rewardToken).balanceOf(address(this));
             if (reward > budget || rewardPerGas == 0) reward = budget;
@@ -489,8 +518,16 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         IERC20(_rewardToken).safeTransfer(msg.sender, reward);
         _pushGasPrice(_rewardToken, FullMath.mulDiv(1e4, reward, _gas));
         emit Reward(_rewardToken, reward, _urgency);
+        return _maintenanceIsSustainable;
     }
 
+    /**
+     * @notice Attempts to withdraw `_amount` from silo0. If `_amount` is more than what's available, withdraw the
+     * maximum amount.
+     * @dev This reads and writes from/to `maintenanceBudget0`, so use sparingly
+     * @param _amount The desired amount of token0 to withdraw from silo0
+     * @return uint256 The actual amount of token0 that was withdrawn
+     */
     function _silo0Withdraw(uint256 _amount) private returns (uint256) {
         unchecked {
             uint256 a = silo0Basis;
@@ -507,6 +544,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
+    /**
+     * @notice Attempts to withdraw `_amount` from silo1. If `_amount` is more than what's available, withdraw the
+     * maximum amount.
+     * @dev This reads and writes from/to `maintenanceBudget1`, so use sparingly
+     * @param _amount The desired amount of token1 to withdraw from silo1
+     * @return uint256 The actual amount of token1 that was withdrawn
+     */
     function _silo1Withdraw(uint256 _amount) private returns (uint256) {
         unchecked {
             uint256 a = silo1Basis;
@@ -540,27 +584,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
     }
 
-    function _unlockAndStorePackedSlot(
-        Uniswap.Position memory _primary,
-        Uniswap.Position memory _limit,
-        uint48 _recenterTimestamp,
-        bool _maintenanceIsSustainable
-    ) private {
-        packedSlot = PackedSlot(
-            _primary.lower,
-            _primary.upper,
-            _limit.lower,
-            _limit.upper,
-            _recenterTimestamp,
-            _maintenanceIsSustainable,
-            false
-        );
-    }
-
     // ⬇️⬇️⬇️⬇️ VIEW FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
 
-    /// @dev TODO
-    // ✅
+    /// @dev Unpacks `packedSlot` from storage, ensuring that `_packedSlot.locked == false`
     function _loadPackedSlot()
         private
         view
@@ -582,7 +608,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getRebalanceUrgency() public view returns (uint32 urgency) {
+    function getRebalanceUrgency() external view returns (uint32 urgency) {
         urgency = _getRebalanceUrgency(packedSlot.recenterTimestamp);
     }
 
@@ -599,7 +625,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     }
 
     /// @inheritdoc IAloeBlendDerivedState
-    function getInventory() public view returns (uint256 inventory0, uint256 inventory1) {
+    function getInventory() external view returns (uint256 inventory0, uint256 inventory1) {
         (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
         (inventory0, inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
@@ -697,7 +723,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     // ⬇️⬇️⬇️⬇️ PURE FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
 
     /// @dev Computes position width based on volatility. Doesn't revert
-    // ✅
     function _computeNextPositionWidth(uint256 _sigma) internal pure returns (uint24) {
         if (_sigma <= 1.00481445e16) return MIN_WIDTH;
         if (_sigma >= 4.41180492e17) return MAX_WIDTH;
@@ -711,7 +736,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     /// @dev Computes amounts that should be placed in primary Uniswap position to maintain 50/50 inventory ratio.
     /// Doesn't revert as long as MIN_WIDTH <= _halfWidth * 2 <= MAX_WIDTH
-    // ✅
     function _computeMagicAmounts(
         uint256 _inventory0,
         uint256 _inventory1,
@@ -741,7 +765,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     ///     _totalSupply * _amount0Max / _inventory0 > type(uint256).max
     ///     _totalSupply * _amount1Max / _inventory1 > type(uint256).max
     /// This is okay because it only blocks deposit (not withdraw). Can also workaround by depositing smaller amounts
-    // ✅
     function _computeLPShares(
         uint256 _totalSupply,
         uint256 _inventory0,
