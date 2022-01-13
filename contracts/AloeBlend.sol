@@ -64,6 +64,15 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     uint8 public constant MAINTENANCE_FEE = 10; // 1/10th of earnings from primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
+    uint256 public constant FLOAT_PERCENTAGE = 500; // 5% of inventory sits in contract to cheapen small withdrawals
+
+    /// @dev The minimum tick that can serve as a position boundary in the Uniswap pool
+    int24 private immutable MIN_TICK;
+
+    /// @dev The maximum tick that can serve as a position boundary in the Uniswap pool
+    int24 private immutable MAX_TICK;
+
+    /// @inheritdoc IAloeBlendImmutables
     IVolatilityOracle public immutable volatilityOracle;
 
     /// @inheritdoc IAloeBlendImmutables
@@ -135,6 +144,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         )
         UniswapHelper(_uniPool)
     {
+        MIN_TICK = TickMath.ceil(TickMath.MIN_TICK, TICK_SPACING);
+        MAX_TICK = TickMath.floor(TickMath.MAX_TICK, TICK_SPACING);
+
         volatilityOracle = IFactory(msg.sender).VOLATILITY_ORACLE();
         silo0 = _silo0;
         silo1 = _silo1;
@@ -351,7 +363,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             // Deposit to new limit order and store bounds
             limit.deposit(limit.liquidityForAmount0(amount0));
         } else {
-            recenter(cache, primary, inventory0, inventory1);
+            _recenter(cache, primary, d.primaryLiquidity, inventory0, inventory1, maintenanceIsSustainable);
             recenterTimestamp = uint48(block.timestamp);
         }
 
@@ -367,52 +379,75 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         _unlockAndStorePackedSlot(primary, limit, recenterTimestamp, maintenanceIsSustainable);
     }
 
-    function recenter(
+    /**
+     * @notice Recenters the primary Uniswap position around the current tick. Deposits leftover funds into the silos.
+     * @dev This function assumes that the limit order has no liquidity (never existed or already exited)
+     * @param _cache The rebalance cache, populated with *at least* sqrtPriceX96, priceX96, and tick
+     * @param _primary The existing primary Uniswap position
+     * @param _primaryLiquidity The amount of liquidity currently in `_primary`
+     * @param _inventory0 The amount of token0 underlying all LP tokens. MUST BE <= THE TRUE VALUE. No overestimates!
+     * @param _inventory1 The amount of token1 underlying all LP tokens. MUST BE <= THE TRUE VALUE. No overestimates!
+     * @param _maintenanceIsSustainable Whether `maintenanceBudget0` or `maintenanceBudget1` has filled up according to
+     * `K` -- if false, position width is maximized rather than scaling with volatility
+     * @return Uniswap.Position memory `_primary` updated with new lower and upper tick bounds
+     */
+    function _recenter(
         RebalanceCache memory _cache,
         Uniswap.Position memory _primary,
+        uint128 _primaryLiquidity,
         uint256 _inventory0,
-        uint256 _inventory1
+        uint256 _inventory1,
+        bool _maintenanceIsSustainable
     ) private returns (Uniswap.Position memory) {
-        uint256 sigma = volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick);
-        _cache.w = _computeNextPositionWidth(sigma);
-
         // Exit primary Uniswap position
-        {
-            (uint128 liquidity, , , , ) = _primary.info();
-            (, , uint256 earned0, uint256 earned1) = _primary.withdraw(liquidity);
-            _earmarkSomeForMaintenance(earned0, earned1);
+        unchecked {
+            (, , uint256 earned0, uint256 earned1) = _primary.withdraw(_primaryLiquidity);
+            maintenanceBudget0 += earned0 / MAINTENANCE_FEE;
+            maintenanceBudget1 += earned1 / MAINTENANCE_FEE;
         }
 
-        // Compute amounts that should be placed in new Uniswap position
-        uint256 amount0;
-        uint256 amount1;
-        _cache.w = _cache.w >> 1;
-        (_cache.magic, amount0, amount1) = _computeMagicAmounts(_inventory0, _inventory1, _cache.priceX96, _cache.w);
+        // Decide primary position width...
+        uint24 w = _maintenanceIsSustainable
+            ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick))
+            : MAX_WIDTH;
+        w = w >> 1;
+        // ...and compute amounts that should be placed inside
+        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, _cache.priceX96, w);
 
-        uint256 balance0 = _balance0();
-        uint256 balance1 = _balance1();
-        bool hasExcessToken0 = balance0 > amount0;
-        bool hasExcessToken1 = balance1 > amount1;
-
-        // Because of cToken exchangeRate rounding, we may withdraw too much
-        // here. That's okay; dust will just sit in contract till next rebalance
-        if (!hasExcessToken0) silo0.delegate_withdraw(amount0 - balance0);
-        if (!hasExcessToken1) silo1.delegate_withdraw(amount1 - balance1);
+        // If contract balance (leaving out the float) is insufficient, withdraw from silos
+        int256 balance0;
+        int256 balance1;
+        unchecked {
+            balance0 = int256(_balance0()) - int256(FullMath.mulDiv(_inventory0, FLOAT_PERCENTAGE, 10_000));
+            balance1 = int256(_balance1()) - int256(FullMath.mulDiv(_inventory1, FLOAT_PERCENTAGE, 10_000));
+            if (balance0 < int256(amount0)) {
+                amount0 = uint256(balance0 + int256(_silo0Withdraw(uint256(int256(amount0) - balance0))));
+            }
+            if (balance1 < int256(amount1)) {
+                amount1 = uint256(balance1 + int256(_silo1Withdraw(uint256(int256(amount1) - balance1))));
+            }
+        }
 
         // Update primary position's ticks
-        _primary.lower = TickMath.floor(_cache.tick - int24(_cache.w), TICK_SPACING);
-        _primary.upper = TickMath.ceil(_cache.tick + int24(_cache.w), TICK_SPACING);
-        if (_primary.lower < TickMath.MIN_TICK) _primary.lower = TickMath.MIN_TICK;
-        if (_primary.upper > TickMath.MAX_TICK) _primary.upper = TickMath.MAX_TICK;
+        _primary.lower = TickMath.floor(_cache.tick - int24(w), TICK_SPACING);
+        _primary.upper = TickMath.ceil(_cache.tick + int24(w), TICK_SPACING);
+        if (_primary.lower < MIN_TICK) _primary.lower = MIN_TICK;
+        if (_primary.upper > MAX_TICK) _primary.upper = MAX_TICK;
 
         // Place some liquidity in Uniswap
         (amount0, amount1) = _primary.deposit(_primary.liquidityForAmounts(_cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into silos
-        if (hasExcessToken0) silo0.delegate_deposit(balance0 - amount0);
-        if (hasExcessToken1) silo1.delegate_deposit(balance1 - amount1);
+        if (balance0 > int256(amount0)) {
+            silo0.delegate_deposit(uint256(balance0) - amount0);
+            silo0Basis += uint256(balance0) - amount0;
+        }
+        if (balance1 > int256(amount1)) {
+            silo1.delegate_deposit(uint256(balance1) - amount1);
+            silo1Basis += uint256(balance1) - amount1;
+        }
 
-        emit Recenter(_primary.lower, _primary.upper, _cache.magic);
+        emit Recenter(_primary.lower, _primary.upper);
         return _primary;
     }
 

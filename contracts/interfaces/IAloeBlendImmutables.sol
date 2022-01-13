@@ -28,6 +28,11 @@ interface IAloeBlendImmutables {
     /// added to the maintenance budget.
     function MAINTENANCE_FEE() external view returns (uint8);
 
+    /// @notice The percentage of funds (in basis points) that will be left in the contract after the primary Uniswap
+    /// position is recentered. If your share of the pool is <<< than this, withdrawals will be more gas efficient.
+    /// Also makes it less gassy to place limit orders.
+    function FLOAT_PERCENTAGE() external view returns (uint256);
+
     /// @notice The volatility oracle used to decide position width
     function volatilityOracle() external view returns (IVolatilityOracle);
 
