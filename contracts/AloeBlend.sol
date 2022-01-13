@@ -297,7 +297,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     /// @inheritdoc IAloeBlendActions
     function rebalance(address rewardToken) external {
-        uint32 gasStart = uint32(gasleft());
+        uint32 gas = uint32(gasleft());
         // Reentrancy guard is embedded in `_loadPackedSlot` to save gas
         (
             Uniswap.Position memory primary,
@@ -307,11 +307,11 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         ) = _loadPackedSlot();
         packedSlot.locked = true;
 
+        // Populate rebalance cache
         RebalanceCache memory cache;
         (cache.sqrtPriceX96, cache.tick, , , , , ) = UNI_POOL.slot0();
         cache.priceX96 = uint224(FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, Q96));
-        // Get rebalance urgency (based on time elapsed since previous rebalance)
-        cache.urgency = _getRebalanceUrgency(recenterTimestamp);
+        uint32 urgency = _getRebalanceUrgency(recenterTimestamp);
 
         // Poke silos to ensure reported balances are correct
         silo0.delegate_poke();
@@ -333,50 +333,63 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             inventory0,
             inventory0 + FullMath.mulDiv(inventory1, Q96, cache.priceX96)
         );
-
         if (ratio < 4900) {
-            // Attempt to sell token1 for token0. Place a limit order below the active range
+            // Attempt to sell token1 for token0. Choose limit order bounds below the market price. Disable
+            // incentive if removing & replacing in the same spot
             limit.upper = TickMath.floor(cache.tick, TICK_SPACING);
+            if (d.limitLiquidity != 0 && limit.lower == limit.upper - TICK_SPACING) urgency = 0;
             limit.lower = limit.upper - TICK_SPACING;
-            // Choose amount1 such that ratio will be 50/50 once the limit order is pushed through. Division by 2
-            // works for small tickSpacing. Also have to constrain to fluid1 since we're not yet withdrawing from
-            // primary Uniswap position.
+            // Choose amount1 such that ratio will be 50/50 once the limit order is pushed through (division by 2
+            // is a good approximation for small tickSpacing). Also have to constrain to fluid1 since we're not
+            // yet withdrawing from primary Uniswap position
             uint256 amount1 = (inventory1 - FullMath.mulDiv(inventory0, cache.priceX96, Q96)) >> 1;
             if (amount1 > d.fluid1) amount1 = d.fluid1;
-            // Withdraw requisite amount from silo
-            uint256 balance1 = _balance1();
-            if (balance1 < amount1) silo1.delegate_withdraw(amount1 - balance1);
-            // Deposit to new limit order and store bounds
+            // If contract balance is insufficient, withdraw from silo1. That still may not be enough, so reassign
+            // `amount1` to the actual available amount
+            unchecked {
+                uint256 balance1 = _balance1();
+                if (balance1 < amount1) amount1 = balance1 + _silo1Withdraw(amount1 - balance1);
+            }
+            // Place a new limit order and store bounds
             limit.deposit(limit.liquidityForAmount1(amount1));
         } else if (ratio > 5100) {
-            // Attempt to sell token0 for token1. Place a limit order above the active range
+            // Attempt to sell token1 for token0. Choose limit order bounds above the market price. Disable
+            // incentive if removing & replacing in the same spot
             limit.lower = TickMath.ceil(cache.tick, TICK_SPACING);
+            if (d.limitLiquidity != 0 && limit.upper == limit.lower + TICK_SPACING) urgency = 0;
             limit.upper = limit.lower + TICK_SPACING;
-            // Choose amount0 such that ratio will be 50/50 once the limit order is pushed through. Division by 2
-            // works for small tickSpacing. Also have to constrain to fluid0 since we're not yet withdrawing from
-            // primary Uniswap position.
+            // Choose amount0 such that ratio will be 50/50 once the limit order is pushed through (division by 2
+            // is a good approximation for small tickSpacing). Also have to constrain to fluid0 since we're not
+            // yet withdrawing from primary Uniswap position
             uint256 amount0 = (inventory0 - FullMath.mulDiv(inventory1, Q96, cache.priceX96)) >> 1;
             if (amount0 > d.fluid0) amount0 = d.fluid0;
-            // Withdraw requisite amount from silo
-            uint256 balance0 = _balance0();
-            if (balance0 < amount0) silo0.delegate_withdraw(amount0 - balance0);
-            // Deposit to new limit order and store bounds
+            // If contract balance is insufficient, withdraw from silo0. That still may not be enough, so reassign
+            // `amount0` to the actual available amount
+            unchecked {
+                uint256 balance0 = _balance0();
+                if (balance0 < amount0) amount0 = balance0 + _silo0Withdraw(amount0 - balance0);
+            }
+            // Place a new limit order and store bounds
             limit.deposit(limit.liquidityForAmount0(amount0));
         } else {
-            _recenter(cache, primary, d.primaryLiquidity, inventory0, inventory1, maintenanceIsSustainable);
+            // Zero-out the limit struct to indicate that it's inactive
+            delete limit;
+            // Recenter the primary position
+            primary = _recenter(cache, primary, d.primaryLiquidity, inventory0, inventory1, maintenanceIsSustainable);
             recenterTimestamp = uint48(block.timestamp);
         }
 
-        // Poke primary position and withdraw fees so that maintenance budget can grow
-        {
-            (, , uint256 earned0, uint256 earned1) = primary.withdraw(0);
-            _earmarkSomeForMaintenance(earned0, earned1);
-        }
-
-        maintenanceIsSustainable = _rewardCaller(rewardToken, cache.urgency, gasStart, maintenanceIsSustainable);
-
-        emit Rebalance(cache.urgency, ratio, totalSupply, inventory0, inventory1);
-        _unlockAndStorePackedSlot(primary, limit, recenterTimestamp, maintenanceIsSustainable);
+        maintenanceIsSustainable = _rewardCaller(rewardToken, urgency, gas, maintenanceIsSustainable);
+        emit Rebalance(ratio, totalSupply, inventory0, inventory1);
+        packedSlot = PackedSlot(
+            primary.lower,
+            primary.upper,
+            limit.lower,
+            limit.upper,
+            recenterTimestamp,
+            maintenanceIsSustainable,
+            false
+        );
     }
 
     /**
@@ -508,24 +521,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         return _maintenanceIsSustainable;
     }
 
-    /// @dev Earmark some earned fees for maintenance, according to `maintenanceFee`. Return what's leftover
-    function _earmarkSomeForMaintenance(uint256 earned0, uint256 earned1) private returns (uint256, uint256) {
-        uint256 toMaintenance;
-
-        unchecked {
-            // Accrue token0
-            toMaintenance = earned0 / MAINTENANCE_FEE;
-            earned0 -= toMaintenance;
-            maintenanceBudget0 += toMaintenance;
-            // Accrue token1
-            toMaintenance = earned1 / MAINTENANCE_FEE;
-            earned1 -= toMaintenance;
-            maintenanceBudget1 += toMaintenance;
-        }
-
-        return (earned0, earned1);
-    }
-
     /**
      * @notice Attempts to withdraw `_amount` from silo0. If `_amount` is more than what's available, withdraw the
      * maximum amount.
@@ -587,23 +582,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             array[idx] = _gasPrice;
             gasPriceIdxs[_token] = (idx + 1) % 14;
         }
-    }
-
-    function _unlockAndStorePackedSlot(
-        Uniswap.Position memory _primary,
-        Uniswap.Position memory _limit,
-        uint48 _recenterTimestamp,
-        bool _maintenanceIsSustainable
-    ) private {
-        packedSlot = PackedSlot(
-            _primary.lower,
-            _primary.upper,
-            _limit.lower,
-            _limit.upper,
-            _recenterTimestamp,
-            _maintenanceIsSustainable,
-            false
-        );
     }
 
     // ⬇️⬇️⬇️⬇️ VIEW FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
