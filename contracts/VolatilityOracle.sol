@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.10;
 
 import "./libraries/Oracle.sol";
@@ -135,7 +135,7 @@ contract VolatilityOracle is IVolatilityOracle {
         return readIndex;
     }
 
-    function _timingError(uint256 age) private pure returns (uint32) {
-        return uint32(age < 24 hours ? 24 hours - age : age - 24 hours);
+    function _timingError(uint256 _age) private pure returns (uint32) {
+        return uint32(_age < 24 hours ? 24 hours - _age : _age - 24 hours);
     }
 }
