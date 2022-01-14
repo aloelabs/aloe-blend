@@ -288,11 +288,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     struct RebalanceCache {
         uint160 sqrtPriceX96;
-        uint96 magic;
-        int24 tick;
-        uint24 w;
-        uint32 urgency;
         uint224 priceX96;
+        int24 tick;
     }
 
     /// @inheritdoc IAloeBlendActions

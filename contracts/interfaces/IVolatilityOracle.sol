@@ -43,19 +43,12 @@ interface IVolatilityOracle {
         );
 
     /**
-     * @notice Returns the index that was closest to 24 hours old last time
-     * `estimate24H` was called
-     * @param pool The Uniswap pool for which read index should be fetched
-     * @return An index into `feeGrowthGlobals`
+     * @notice Returns indices that the contract will use to access `feeGrowthGlobals`
+     * @param pool The Uniswap pool for which array indices should be fetched
+     * @return read The index that was closest to 24 hours old last time `estimate24H` was called
+     * @return write The index that was written to last time `estimate24H` was called
      */
-    function feeGrowthGlobalsReadIndex(address pool) external view returns (uint8);
-
-    /**
-     * @notice Returns the index that was written to last time `estimate24H` was called
-     * @param pool The Uniswap pool for which write index should be fetched
-     * @return An index into `feeGrowthGlobals`
-     */
-    function feeGrowthGlobalsWriteIndex(address pool) external view returns (uint8);
+    function feeGrowthGlobalsIndices(address pool) external view returns (uint8 read, uint8 write);
 
     /**
      * @notice Updates cached metadata for a Uniswap pool. Must be called at least once
@@ -64,6 +57,15 @@ interface IVolatilityOracle {
      * @param pool The Uniswap pool to poke
      */
     function cacheMetadataFor(IUniswapV3Pool pool) external;
+
+    /**
+     * @notice Provides multiple estimates of IV using all stored `feeGrowthGlobals` entries for `pool`
+     * @dev This is not meant to be used on-chain, and it doesn't contribute to the oracle's knowledge.
+     * Please use `estimate24H` instead.
+     * @param pool The pool to use for volatility estimate
+     * @return IV The array of volatility estimates, scaled by 1e18
+     */
+    function lens(IUniswapV3Pool pool) external returns (uint256[25] memory IV);
 
     /**
      * @notice Estimates 24-hour implied volatility for a Uniswap pool.
