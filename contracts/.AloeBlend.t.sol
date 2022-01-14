@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.10;
 
 import "ds-test/test.sol";
@@ -31,6 +31,25 @@ contract AloeBlendFake is AloeBlend {
         )
     {
         return _computeMagicAmounts(inventory0, inventory1, priceX96, halfWidth);
+    }
+
+    function computeLPShares(
+        uint256 _totalSupply,
+        uint256 _inventory0,
+        uint256 _inventory1,
+        uint256 _amount0Max,
+        uint256 _amount1Max,
+        uint160 _sqrtPriceX96
+    )
+        external
+        pure
+        returns (
+            uint256 shares,
+            uint256 amount0,
+            uint256 amount1
+        )
+    {
+        return _computeLPShares(_totalSupply, _inventory0, _inventory1, _amount0Max, _amount1Max, _sqrtPriceX96);
     }
 }
 
@@ -73,6 +92,8 @@ contract FactoryFake {
     }
 }
 
+// TODO test that primary.liquidity and limit.liquidity are equal to pool.info(...) number
+
 contract AloeBlendTest is DSTest {
     AloeBlendFake blend;
 
@@ -86,6 +107,10 @@ contract AloeBlendTest is DSTest {
         );
     }
 
+    function test_spec_computeRebalanceUrgency() public {
+        // TODO
+    }
+
     function test_computeNextPositionWidth(uint256 IV) public {
         uint24 width = blend.computeNextPositionWidth(IV);
 
@@ -94,10 +119,13 @@ contract AloeBlendTest is DSTest {
     }
 
     function test_spec_computeNextPositionWidth() public {
-        assertEq(blend.computeNextPositionWidth(5e15), 201);
+        assertEq(blend.computeNextPositionWidth(1e16), 402);
+        assertEq(blend.computeNextPositionWidth(2e16), 800);
         assertEq(blend.computeNextPositionWidth(1e17), 4054);
         assertEq(blend.computeNextPositionWidth(2e17), 8473);
-        assertEq(blend.computeNextPositionWidth(4e17), 13864);
+        assertEq(blend.computeNextPositionWidth(3e17), 13863);
+        assertEq(blend.computeNextPositionWidth(4e17), 21973);
+        assertEq(blend.computeNextPositionWidth(5e17), 27728);
     }
 
     function test_computeMagicAmounts(
@@ -135,5 +163,82 @@ contract AloeBlendTest is DSTest {
         assertEq(amount0, 555565);
         assertEq(amount1, 1111130);
         assertEq(magic, 39614800711660855234216192339);
+    }
+
+    function test_computeLPShares(
+        uint128 _totalSupplyDiff,
+        uint256 _inventory0,
+        uint256 _inventory1,
+        uint256 _amount0Max,
+        uint256 _amount1Max,
+        uint160 _sqrtPriceX96
+    ) public {
+        if (_inventory0 > type(uint256).max - _inventory1) return;
+        if (_totalSupplyDiff > _inventory0 + _inventory1) return;
+
+        uint256 _totalSupply = _inventory0 + _inventory1 - _totalSupplyDiff;
+        if (_amount0Max > type(uint256).max / _totalSupply || _amount1Max > type(uint256).max / _totalSupply) return;
+
+        (uint256 shares, uint256 amount0, uint256 amount1) = blend.computeLPShares(
+            _totalSupply,
+            _inventory0,
+            _inventory1,
+            _amount0Max,
+            _amount1Max,
+            _sqrtPriceX96
+        );
+
+        assertLe(amount0, _amount0Max);
+        assertLe(amount1, _amount1Max);
+
+        if (
+            _inventory0 > type(uint256).max - amount0 ||
+            _inventory1 > type(uint256).max - amount1 ||
+            _totalSupply > type(uint256).max - shares
+        ) return;
+
+        uint256 reverse0 = FullMath.mulDiv(_inventory0 + amount0, shares, _totalSupply + shares);
+        uint256 reverse1 = FullMath.mulDiv(_inventory1 + amount1, shares, _totalSupply + shares);
+        assertLe(reverse0, amount0);
+        assertLe(reverse1, amount1);
+        if (amount0 > 100000) assertGe(reverse0, amount0 - 1);
+        if (amount1 > 100000) assertGe(reverse1, amount1 - 1);
+    }
+
+    function test_spec_computeLPShares() public {
+        uint256 shares;
+        uint256 amount0;
+        uint256 amount1;
+
+        (shares, amount0, amount1) = blend.computeLPShares(0, 0, 0, 10000000, 20000001, 1.120455419e29);
+        assertEq(shares, 10000000);
+        assertEq(amount0, 10000000);
+        assertEq(amount1, 19999999);
+        (shares, amount0, amount1) = blend.computeLPShares(0, 0, 0, 10000001, 20000000, 1.120455419e29);
+        assertEq(shares, 20000000);
+        assertEq(amount0, 10000000);
+        assertEq(amount1, 20000000);
+        (shares, amount0, amount1) = blend.computeLPShares(
+            20000000,
+            10000000,
+            20000000,
+            20000000,
+            40000000,
+            1.120455419e29
+        );
+        assertEq(shares, 40000000);
+        assertEq(amount0, 20000000);
+        assertEq(amount1, 40000000);
+        (shares, amount0, amount1) = blend.computeLPShares(
+            60000000,
+            30000000,
+            60000000,
+            20000000,
+            40000000,
+            1.58456325e29
+        );
+        assertEq(shares, 40000000);
+        assertEq(amount0, 20000000);
+        assertEq(amount1, 40000000);
     }
 }
