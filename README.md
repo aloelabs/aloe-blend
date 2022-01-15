@@ -30,7 +30,11 @@ yarn build-dapp
 yarn test-dapp
 ```
 
+<<<<<<< HEAD
 If things aren't working, make sure you populate a `.env` file as shown in [.env.template](/.env.template)
+=======
+If things aren't working, make sure you populate a `.env` file as shown in [.env.template](.env.template)
+>>>>>>> 8367728338da789d4c6e6a09129d317d2f6ff2f7
 
 ## Contracts
 
