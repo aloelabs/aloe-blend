@@ -423,7 +423,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             : MAX_WIDTH;
         w = w >> 1;
         // ...and compute amounts that should be placed inside
-        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, _cache.priceX96, w);
+        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, w);
 
         // If contract balance (leaving out the float) is insufficient, withdraw from silos
         int256 balance0;
@@ -432,9 +432,11 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             balance0 = int256(_balance0()) - int256(FullMath.mulDiv(_inventory0, FLOAT_PERCENTAGE, 10_000));
             balance1 = int256(_balance1()) - int256(FullMath.mulDiv(_inventory1, FLOAT_PERCENTAGE, 10_000));
             if (balance0 < int256(amount0)) {
+                _inventory0 = 0; // reusing variable to avoid stack too deep
                 amount0 = uint256(balance0 + int256(_silo0Withdraw(uint256(int256(amount0) - balance0))));
             }
             if (balance1 < int256(amount1)) {
+                _inventory1 = 0; // reusing variable to avoid stack too deep 
                 amount1 = uint256(balance1 + int256(_silo1Withdraw(uint256(int256(amount1) - balance1))));
             }
         }
@@ -449,11 +451,11 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         (amount0, amount1) = _primary.deposit(_primary.liquidityForAmounts(_cache.sqrtPriceX96, amount0, amount1));
 
         // Place excess into silos
-        if (balance0 > int256(amount0)) {
+        if (_inventory0 != 0) {
             silo0.delegate_deposit(uint256(balance0) - amount0);
             silo0Basis += uint256(balance0) - amount0;
         }
-        if (balance1 > int256(amount1)) {
+        if (_inventory1 != 0) {
             silo1.delegate_deposit(uint256(balance1) - amount1);
             silo1Basis += uint256(balance1) - amount1;
         }
@@ -744,7 +746,6 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     function _computeMagicAmounts(
         uint256 _inventory0,
         uint256 _inventory1,
-        uint224 _priceX96,
         uint24 _halfWidth
     )
         internal
@@ -756,13 +757,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         )
     {
         magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-int24(_halfWidth)));
-        if (FullMath.mulDiv(_inventory0, _priceX96, Q96) > _inventory1) {
-            amount1 = FullMath.mulDiv(_inventory1, magic, Q96);
-            amount0 = FullMath.mulDiv(amount1, Q96, _priceX96);
-        } else {
-            amount0 = FullMath.mulDiv(_inventory0, magic, Q96);
-            amount1 = FullMath.mulDiv(amount0, _priceX96, Q96);
-        }
+        amount0 = FullMath.mulDiv(_inventory0, magic, Q96);
+        amount1 = FullMath.mulDiv(_inventory1, magic, Q96);
     }
 
     /// @dev Computes the largest possible `amount0` and `amount1` such that they match the current inventory ratio,
