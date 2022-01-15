@@ -1,5 +1,7 @@
 # Aloe Blend
 
+[![dapptools](https://github.com/aloelabs/aloe-blend/actions/workflows/dapptools.yml/badge.svg?branch=master)](https://github.com/aloelabs/aloe-blend/actions/workflows/dapptools.yml)
+
 This repository contains the core smart contracts for the Aloe Blend Protocol.
 
 ## Bug bounty
