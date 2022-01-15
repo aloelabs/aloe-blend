@@ -4,7 +4,7 @@
   "main": "index.js",
   "repository": "https://github.com/aloelabs/aloe-blend.git",
   "author": "Aloe Labs, Inc.",
-  "license": "None",
+  "license": "AGPL-v3",
   "private": true,
   "dependencies": {},
   "devDependencies": {
