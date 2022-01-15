@@ -150,6 +150,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         volatilityOracle = IFactory(msg.sender).VOLATILITY_ORACLE();
         silo0 = _silo0;
         silo1 = _silo1;
+
+        (uint32 maxSecondsAgo, , , ) = volatilityOracle.cachedPoolMetadata(address(_uniPool));
+        require(maxSecondsAgo >= 1 hours, "Aloe: oracle");
     }
 
     /// @inheritdoc IAloeBlendActions
@@ -178,7 +181,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         silo1.delegate_poke();
 
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
-        (uint256 inventory0, uint256 inventory1, ) = _getInventory(primary, limit, sqrtPriceX96, true);
+        (uint256 inventory0, uint256 inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
         (shares, amount0, amount1) = _computeLPShares(
             totalSupply,
             inventory0,
@@ -318,8 +321,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         (uint256 inventory0, uint256 inventory1, InventoryDetails memory d) = _getInventory(
             primary,
             limit,
-            cache.sqrtPriceX96,
-            false
+            cache.sqrtPriceX96
         );
 
         // Remove the limit order if it exists
@@ -626,7 +628,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     function getInventory() external view returns (uint256 inventory0, uint256 inventory1) {
         (Uniswap.Position memory primary, Uniswap.Position memory limit, , ) = _loadPackedSlot();
         (uint160 sqrtPriceX96, , , , , , ) = UNI_POOL.slot0();
-        (inventory0, inventory1, ) = _getInventory(primary, limit, sqrtPriceX96, false);
+        (inventory0, inventory1, ) = _getInventory(primary, limit, sqrtPriceX96);
     }
 
     struct InventoryDetails {
@@ -645,19 +647,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /**
      * @notice Estimate's the vault's liabilities to users -- in other words, how much would be paid out if all
      * holders redeemed their LP tokens at once.
-     * @dev Underestimates the true payout unless both silos and Uniswap positions have just been poked. Also...
-     * if _overestimate is false
-     *      Assumes that the maximum amount will accrue to the maintenance budget during the next `rebalance()`. If it
-     *      takes less than that for the budget to reach capacity, then the values reported here may increase after
-     *      calling `rebalance()`.
-     * if _overestimate is true
-     *      Assumes that nothing will accrue to the maintenance budget during the next `rebalance()`. So the values
-     *      reported here may decrease after calling `rebalance()`, i.e. this becomes an overestimate rather than an
-     *      underestimate.
+     * @dev Underestimates the true payout unless both silos and Uniswap positions have just been poked. Also
+     * assumes that the maximum amount will accrue to the maintenance budget during the next `rebalance()`. If
+     * it takes less than that for the budget to reach capacity, then the values reported here may increase after
+     * calling `rebalance()`.
      * @param _primary The primary position
      * @param _limit The limit order; if inactive, `_limit.lower` should equal `_limit.upper`
      * @param _sqrtPriceX96 The current sqrt(price) of the Uniswap pair from `slot0()`
-     * @param _overestimate Whether to error on the side of overestimating or underestimating
      * @return inventory0 The amount of token0 underlying all LP tokens
      * @return inventory1 The amount of token1 underlying all LP tokens
      * @return d A struct containing details that may be relevant to other functions. We return it here to avoid
@@ -666,8 +662,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     function _getInventory(
         Uniswap.Position memory _primary,
         Uniswap.Position memory _limit,
-        uint160 _sqrtPriceX96,
-        bool _overestimate
+        uint160 _sqrtPriceX96
     )
         private
         view
@@ -693,21 +688,21 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         a = silo0Basis;
         b = silo0.balanceOf(address(this));
         a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
-        d.fluid0 += _balance0() + b - (_overestimate ? 0 : a);
+        d.fluid0 += _balance0() + b - a;
 
         // token1 from contract + silo1
         a = silo1Basis;
         b = silo1.balanceOf(address(this));
         a = b > a ? (b - a) / MAINTENANCE_FEE : 0; // interest / MAINTENANCE_FEE
-        d.fluid1 += _balance1() + b - (_overestimate ? 0 : a);
+        d.fluid1 += _balance1() + b - a;
 
         // Primary position; limit order is placed without touching this, so its amounts aren't included in `fluid`
         if (_primary.lower != _primary.upper) {
             (d.primaryLiquidity, , , a, b) = _primary.info();
             (inventory0, inventory1) = _primary.amountsForLiquidity(_sqrtPriceX96, d.primaryLiquidity);
 
-            inventory0 += d.fluid0 + a - (_overestimate ? 0 : a / MAINTENANCE_FEE);
-            inventory1 += d.fluid1 + b - (_overestimate ? 0 : b / MAINTENANCE_FEE);
+            inventory0 += d.fluid0 + a - a / MAINTENANCE_FEE;
+            inventory1 += d.fluid1 + b - b / MAINTENANCE_FEE;
         } else {
             inventory0 = d.fluid0;
             inventory1 = d.fluid1;

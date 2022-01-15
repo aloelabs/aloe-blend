@@ -29,11 +29,6 @@ import "./interfaces/IVolatilityOracle.sol";
 */
 
 contract VolatilityOracle is IVolatilityOracle {
-    struct Indices {
-        uint8 read;
-        uint8 write;
-    }
-
     /// @inheritdoc IVolatilityOracle
     mapping(address => Volatility.PoolMetadata) public cachedPoolMetadata;
 
@@ -41,7 +36,10 @@ contract VolatilityOracle is IVolatilityOracle {
     mapping(address => Volatility.FeeGrowthGlobals[25]) public feeGrowthGlobals;
 
     /// @inheritdoc IVolatilityOracle
-    mapping(address => Indices) public feeGrowthGlobalsIndices;
+    mapping(address => uint8) public feeGrowthGlobalsReadIndex;
+
+    /// @inheritdoc IVolatilityOracle
+    mapping(address => uint8) public feeGrowthGlobalsWriteIndex;
 
     /// @inheritdoc IVolatilityOracle
     function cacheMetadataFor(IUniswapV3Pool pool) external {
@@ -62,33 +60,25 @@ contract VolatilityOracle is IVolatilityOracle {
     }
 
     /// @inheritdoc IVolatilityOracle
-    function lens(IUniswapV3Pool pool) external view returns (uint256[25] memory IV) {
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
-        Volatility.FeeGrowthGlobals[25] memory feeGrowthGlobal = feeGrowthGlobals[address(pool)];
-
-        for (uint8 i = 0; i < 25; i++) {
-            (IV[i], ) = _estimate24H(pool, sqrtPriceX96, tick, feeGrowthGlobal[i]);
-        }
-    }
-
-    /// @inheritdoc IVolatilityOracle
     function estimate24H(
         IUniswapV3Pool pool,
         uint160 sqrtPriceX96,
         int24 tick
     ) external returns (uint256 IV) {
         Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal = feeGrowthGlobals[address(pool)];
-        Indices memory idxs = _loadIndicesAndSelectRead(pool, feeGrowthGlobal);
+        uint8 readIndex = _pickReadIndex(pool, feeGrowthGlobal);
 
         Volatility.FeeGrowthGlobals memory current;
-        (IV, current) = _estimate24H(pool, sqrtPriceX96, tick, feeGrowthGlobal[idxs.read]);
+        (IV, current) = _estimate24H(pool, sqrtPriceX96, tick, feeGrowthGlobal[readIndex]);
 
         // Write to storage
-        if (current.timestamp - 1 hours > feeGrowthGlobal[idxs.write].timestamp) {
-            idxs.write = (idxs.write + 1) % 25;
-            feeGrowthGlobals[address(pool)][idxs.write] = current;
+        feeGrowthGlobalsReadIndex[address(pool)] = readIndex;
+        uint8 writeIndex = feeGrowthGlobalsWriteIndex[address(pool)];
+        if (current.timestamp - 1 hours > feeGrowthGlobal[writeIndex].timestamp) {
+            writeIndex = (writeIndex + 1) % 25;
+            feeGrowthGlobals[address(pool)][writeIndex] = current;
+            feeGrowthGlobalsWriteIndex[address(pool)] = writeIndex;
         }
-        feeGrowthGlobalsIndices[address(pool)] = idxs;
     }
 
     function _estimate24H(
@@ -100,7 +90,6 @@ contract VolatilityOracle is IVolatilityOracle {
         Volatility.PoolMetadata memory poolMetadata = cachedPoolMetadata[address(_pool)];
 
         uint32 secondsAgo = poolMetadata.maxSecondsAgo;
-        require(secondsAgo >= 1 hours, "Aloe: need more data");
         if (secondsAgo > 1 days) secondsAgo = 1 days;
         // Throws if secondsAgo == 0
         (int24 arithmeticMeanTick, uint160 secondsPerLiquidityX128) = Oracle.consult(_pool, secondsAgo);
@@ -125,25 +114,25 @@ contract VolatilityOracle is IVolatilityOracle {
         );
     }
 
-    function _loadIndicesAndSelectRead(IUniswapV3Pool _pool, Volatility.FeeGrowthGlobals[25] storage _feeGrowthGlobal)
+    function _pickReadIndex(IUniswapV3Pool _pool, Volatility.FeeGrowthGlobals[25] storage _feeGrowthGlobal)
         private
         view
-        returns (Indices memory)
+        returns (uint8)
     {
-        Indices memory idxs = feeGrowthGlobalsIndices[address(_pool)];
-        uint32 timingError = _timingError(block.timestamp - _feeGrowthGlobal[idxs.read].timestamp);
+        uint8 readIndex = feeGrowthGlobalsReadIndex[address(_pool)];
+        uint32 timingError = _timingError(block.timestamp - _feeGrowthGlobal[readIndex].timestamp);
 
-        for (uint8 counter = idxs.read + 1; counter < idxs.read + 25; counter++) {
+        for (uint8 counter = readIndex + 1; counter < readIndex + 25; counter++) {
             uint8 newReadIndex = counter % 25;
             uint32 newTimingError = _timingError(block.timestamp - _feeGrowthGlobal[newReadIndex].timestamp);
 
             if (newTimingError < timingError) {
-                idxs.read = newReadIndex;
+                readIndex = newReadIndex;
                 timingError = newTimingError;
             } else break;
         }
 
-        return idxs;
+        return readIndex;
     }
 
     function _timingError(uint256 _age) private pure returns (uint32) {
