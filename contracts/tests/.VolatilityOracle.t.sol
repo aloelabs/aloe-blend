@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 import "ds-test/test.sol";
 
-import "./VolatilityOracle.sol";
+import "contracts/VolatilityOracle.sol";
 
 interface HEVM {
     function warp(uint256 timestamp) external;
