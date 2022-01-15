@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 import "ds-test/test.sol";
 
-import "./AloeBlend.sol";
+import "contracts/AloeBlend.sol";
 
 contract AloeBlendFake is AloeBlend {
     constructor(

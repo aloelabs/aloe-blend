@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 import "ds-test/test.sol";
 
-import "./TickMath.sol";
+import "contracts/libraries/TickMath.sol";
 
 contract TickMathFake {
     function floor(int24 tick, int24 tickSpacing) external pure returns (int24) {
