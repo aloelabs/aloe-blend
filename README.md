@@ -1,6 +1,6 @@
 # Aloe Blend
 
-[![dapptools](https://github.com/aloelabs/aloe-blend/actions/workflows/dapptools.yml/badge.svg?branch=master)](https://github.com/aloelabs/aloe-blend/actions/workflows/dapptools.yml)
+[![dapptools](https://github.com/aloelabs/aloe-blend/actions/workflows/dapptools.yml/badge.svg)](https://github.com/aloelabs/aloe-blend/actions/workflows/dapptools.yml)
 
 This repository contains the core smart contracts for the Aloe Blend Protocol.
 
@@ -10,7 +10,8 @@ This repository will soon be part of an Immunefi bug bounty program.
 
 ## Disclaimer
 
-This is experimental software and is provided on an "as is" and "as available" basis. We **do not give any warranties** and **will not be liable for any loss incurred** through any use of this codebase.
+This is experimental software and is provided on an "as is" and "as available" basis. We **do not give any warranties** and **will
+not be liable for any loss incurred** through any use of this codebase.
 
 ## Environment
 
@@ -32,7 +33,8 @@ yarn build-dapp
 yarn test-dapp
 ```
 
-If things aren't working, make sure you populate a `.env` file as shown in [.env.template](.env.template)
+If things aren't working, make sure you populate a `.env` file as shown in [.env.template](.env.template). Also make sure
+that you run `git submodule init` and `git submodule update` after cloning.
 
 ## Contracts
 

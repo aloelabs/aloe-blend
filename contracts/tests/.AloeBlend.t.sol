@@ -76,10 +76,10 @@ contract VolatilityOracleFake {
 }
 
 contract FactoryFake {
-    IVolatilityOracle public immutable VOLATILITY_ORACLE;
+    IVolatilityOracle public immutable volatilityOracle;
 
     constructor(IVolatilityOracle _volatilityOracle) {
-        VOLATILITY_ORACLE = _volatilityOracle;
+        volatilityOracle = _volatilityOracle;
     }
 
     function create(
@@ -90,8 +90,6 @@ contract FactoryFake {
         return new AloeBlendFake(_uniPool, _silo0, _silo1);
     }
 }
-
-// TODO test that primary.liquidity and limit.liquidity are equal to pool.info(...) number
 
 contract AloeBlendTest is DSTest {
     AloeBlendFake blend;

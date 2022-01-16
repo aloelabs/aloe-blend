@@ -2,7 +2,7 @@ const chai = require("chai");
 const chaiAsPromised = require("chai-as-promised");
 const { artifacts } = require("hardhat");
 
-const AloeBlend = artifacts.require("AloeBlendCapped");
+const AloeBlend = artifacts.require("AloeBlend");
 const CompoundCEtherSilo = artifacts.require("CompoundCEtherSilo");
 const CompoundCTokenSilo = artifacts.require("CompoundCTokenSilo");
 const ERC20 = artifacts.require("ERC20");

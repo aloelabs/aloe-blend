@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/Address.sol";
 
-import "../interfaces/ISilo.sol";
+import "contracts/interfaces/ISilo.sol";
 
 library Silo {
     using Address for address;

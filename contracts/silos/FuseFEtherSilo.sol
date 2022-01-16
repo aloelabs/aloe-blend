@@ -3,8 +3,8 @@ pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "../libraries/FullMath.sol";
-import "../interfaces/ISilo.sol";
+import "contracts/libraries/FullMath.sol";
+import "contracts/interfaces/ISilo.sol";
 
 interface IFEther {
     function accrueInterest() external returns (uint256);
