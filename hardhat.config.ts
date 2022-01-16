@@ -1,4 +1,4 @@
-require("dotenv-safe").config();
+require("dotenv-safe").config({ example: ".env.template" });
 
 require("@nomiclabs/hardhat-truffle5");
 

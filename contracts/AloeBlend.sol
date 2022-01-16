@@ -10,8 +10,7 @@ import "./libraries/Silo.sol";
 import "./libraries/Uniswap.sol";
 
 import "./interfaces/IAloeBlend.sol";
-import "./interfaces/IFactory.sol";
-import "./interfaces/IVolatilityOracle.sol";
+import {IFactory} from "./interfaces/IFactory.sol";
 
 import "./AloeBlendERC20.sol";
 import "./UniswapHelper.sol";
@@ -147,7 +146,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         MIN_TICK = TickMath.ceil(TickMath.MIN_TICK, TICK_SPACING);
         MAX_TICK = TickMath.floor(TickMath.MAX_TICK, TICK_SPACING);
 
-        volatilityOracle = IFactory(msg.sender).VOLATILITY_ORACLE();
+        volatilityOracle = IFactory(msg.sender).volatilityOracle();
         silo0 = _silo0;
         silo1 = _silo1;
     }
