@@ -5,5 +5,5 @@ import "./IVolatilityOracle.sol";
 
 interface IFactory {
     /// @notice The address of the volatility oracle
-    function VOLATILITY_ORACLE() external view returns (IVolatilityOracle);
+    function volatilityOracle() external view returns (IVolatilityOracle);
 }
