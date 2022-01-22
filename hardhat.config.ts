@@ -44,7 +44,7 @@ module.exports = {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
       timeout: 720000,
       accounts: [process.env.DEPLOYER],
-      gasPrice: 75000000000,
+      gasPrice: 85e9,
       gasMultiplier: 1.15,
     },
     kovan: {

@@ -48,7 +48,7 @@ contract VolatilityOracle is IVolatilityOracle {
         Volatility.PoolMetadata memory poolMetadata;
 
         (, , uint16 observationIndex, uint16 observationCardinality, , uint8 feeProtocol, ) = pool.slot0();
-        poolMetadata.maxSecondsAgo = Oracle.getMaxSecondsAgo(pool, observationIndex, observationCardinality);
+        poolMetadata.maxSecondsAgo = Oracle.getMaxSecondsAgo(pool, observationIndex, observationCardinality) * 4 / 5;
 
         uint24 fee = pool.fee();
         poolMetadata.gamma0 = fee;
