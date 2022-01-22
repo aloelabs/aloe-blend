@@ -34,7 +34,7 @@ contract VolatilityOracleTest is DSTest {
             address(pool)
         );
 
-        assertEq(maxSecondsAgo, 118982);
+        assertEq(maxSecondsAgo, 95185);
         assertEq(gamma0, 100);
         assertEq(gamma1, 100);
         assertEq(tickSpacing, 1);
