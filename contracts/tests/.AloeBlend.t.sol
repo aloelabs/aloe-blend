@@ -12,19 +12,18 @@ contract AloeBlendFake is AloeBlend {
         ISilo _silo1
     ) AloeBlend(_uniPool, _silo0, _silo1) {}
 
-    function computeNextPositionWidth(uint256 IV) external pure returns (uint24 width) {
+    function computeNextPositionWidth(uint256 IV) external pure returns (int24 width) {
         width = _computeNextPositionWidth(IV);
     }
 
     function computeMagicAmounts(
         uint256 inventory0,
         uint256 inventory1,
-        uint24 halfWidth
+        int24 halfWidth
     )
         external
         pure
         returns (
-            uint96,
             uint256,
             uint256
         )
@@ -109,19 +108,20 @@ contract AloeBlendTest is DSTest {
     }
 
     function test_computeNextPositionWidth(uint256 IV) public {
-        uint24 width = blend.computeNextPositionWidth(IV);
+        int24 width = blend.computeNextPositionWidth(IV);
 
         assertGe(width, blend.MIN_WIDTH());
         assertLe(width, blend.MAX_WIDTH());
     }
 
     function test_spec_computeNextPositionWidth() public {
-        assertEq(blend.computeNextPositionWidth(1e16), 402);
-        assertEq(blend.computeNextPositionWidth(2e16), 800);
-        assertEq(blend.computeNextPositionWidth(1e17), 4054);
-        assertEq(blend.computeNextPositionWidth(2e17), 8473);
-        assertEq(blend.computeNextPositionWidth(3e17), 13863);
-        assertEq(blend.computeNextPositionWidth(4e17), 21973);
+        assertEq(blend.computeNextPositionWidth(1e14), 402);
+        assertEq(blend.computeNextPositionWidth(1e16), 404);
+        assertEq(blend.computeNextPositionWidth(2e16), 816);
+        assertEq(blend.computeNextPositionWidth(1e17), 4463);
+        assertEq(blend.computeNextPositionWidth(2e17), 10217);
+        assertEq(blend.computeNextPositionWidth(3e17), 18326);
+        assertEq(blend.computeNextPositionWidth(4e17), 27728);
         assertEq(blend.computeNextPositionWidth(5e17), 27728);
     }
 
@@ -130,34 +130,30 @@ contract AloeBlendTest is DSTest {
         uint256 inventory1,
         uint24 halfWidth
     ) public {
-        if (halfWidth < blend.MIN_WIDTH() / 2) return;
-        if (halfWidth > blend.MAX_WIDTH() / 2) return;
+        if (int24(halfWidth) < blend.MIN_WIDTH() / 2) return;
+        if (int24(halfWidth) > blend.MAX_WIDTH() / 2) return;
 
-        (uint96 magic, uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(
+        (uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(
             inventory0,
             inventory1,
-            halfWidth
+            int24(halfWidth)
         );
 
         assertLt(amount0, inventory0);
         assertLt(amount1, inventory1);
-        assertLt(magic, 2**96);
     }
 
     function test_spec_computeMagicAmounts() public {
         uint256 amount0;
         uint256 amount1;
-        uint96 magic;
 
-        (magic, amount0, amount1) = blend.computeMagicAmounts(0, 0, blend.MIN_WIDTH() / 2);
+        (amount0, amount1) = blend.computeMagicAmounts(0, 0, blend.MIN_WIDTH() / 2);
         assertEq(amount0, 0);
         assertEq(amount1, 0);
-        assertEq(magic, 792215870747104703836069196);
 
-        (magic, amount0, amount1) = blend.computeMagicAmounts(1111111, 2222222, blend.MAX_WIDTH() / 2);
+        (amount0, amount1) = blend.computeMagicAmounts(1111111, 2222222, blend.MAX_WIDTH() / 2);
         assertEq(amount0, 555565);
         assertEq(amount1, 1111131);
-        assertEq(magic, 39614800711660855234216192339);
     }
 
     function test_computeLPShares(

@@ -48,13 +48,16 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     uint24 public constant RECENTERING_INTERVAL = 24 hours; // aim to recenter once per day
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant MIN_WIDTH = 402; // 1% of inventory in primary Uniswap position
+    int24 public constant MIN_WIDTH = 402; // 1% of inventory in primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
-    uint24 public constant MAX_WIDTH = 27728; // 50% of inventory in primary Uniswap position
+    int24 public constant MAX_WIDTH = 27728; // 50% of inventory in primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant K = 10; // maintenance budget should cover at least 10 rebalances
+    uint8 public constant K = 20; // maintenance budget should cover at least 20 rebalances
+
+    /// @inheritdoc IAloeBlendImmutables
+    uint8 public constant L = 4; // if maintenance budget drops below 1/4th of its max value, consider it unsustainable
 
     /// @inheritdoc IAloeBlendImmutables
     uint8 public constant B = 2; // primary Uniswap position should cover 95% (2 std. dev.) of trading activity
@@ -422,7 +425,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             : int24(MAX_WIDTH);
         w = w >> 1;
         // ...and compute amounts that should be placed inside
-        (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, w);
+        (uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, w);
 
         // If contract balance (leaving out the float) is insufficient, withdraw from silos
         int256 balance0;
@@ -498,17 +501,21 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             if (reward > budget || rewardPerGas == 0) reward = budget;
             budget -= reward;
 
-            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
-            _maintenanceIsSustainable = budget > maxBudget;
-            maintenanceBudget0 = _maintenanceIsSustainable ? maxBudget : budget;
+            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, 7000000, 1e4);
+            maintenanceBudget0 = budget > maxBudget ? maxBudget : budget;
+
+            if (budget > maxBudget) _maintenanceIsSustainable = true;
+            else if (budget < maxBudget / L) _maintenanceIsSustainable = false;
         } else if (_rewardToken == address(TOKEN1)) {
             uint256 budget = maintenanceBudget1;
             if (reward > budget || rewardPerGas == 0) reward = budget;
             budget -= reward;
 
-            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, block.gaslimit, 1e4);
-            _maintenanceIsSustainable = budget > maxBudget;
-            maintenanceBudget1 = _maintenanceIsSustainable ? maxBudget : budget;
+            uint256 maxBudget = FullMath.mulDiv(rewardPerGas * K, 7000000, 1e4);
+            maintenanceBudget1 = budget > maxBudget ? maxBudget : budget;
+
+            if (budget > maxBudget) _maintenanceIsSustainable = true;
+            else if (budget < maxBudget / L) _maintenanceIsSustainable = false;
         } else {
             uint256 budget = IERC20(_rewardToken).balanceOf(address(this));
             if (reward > budget || rewardPerGas == 0) reward = budget;
@@ -732,13 +739,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
     /// @dev Computes position width based on volatility. Doesn't revert
     function _computeNextPositionWidth(uint256 _sigma) internal pure returns (int24) {
-        if (_sigma <= 1.00481445e16) return MIN_WIDTH;
-        if (_sigma >= 4.41180492e17) return MAX_WIDTH;
+        if (_sigma <= 9.9491783619e15) return MIN_WIDTH; // \frac{1e18}{B} (1 - \frac{1}{1.0001^(MIN_WIDTH / 2)})
+        if (_sigma >= 3.7500454036e17) return MAX_WIDTH; // \frac{1e18}{B} (1 - \frac{1}{1.0001^(MAX_WIDTH / 2)})
         _sigma *= B; // scale by a constant factor to increase confidence
 
         unchecked {
-            uint160 ratio = uint160((Q96 * (1e18 + _sigma)) / (1e18 - _sigma));
-            return TickMath.getTickAtSqrtRatio(ratio) >> 1;
+            uint160 ratio = uint160(Q96 * 1e18 / (1e18 - _sigma));
+            return TickMath.getTickAtSqrtRatio(ratio);
         }
     }
 
