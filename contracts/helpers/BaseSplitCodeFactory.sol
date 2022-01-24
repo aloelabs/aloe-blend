@@ -29,8 +29,6 @@ abstract contract BaseSplitCodeFactory {
     // We rely on inline-assembly to achieve this, both to make the entire operation highly gas efficient, and because
     // `extcodecopy` is not available in Solidity.
 
-    // solhint-disable no-inline-assembly
-
     address private immutable _creationCodeContractA;
     uint256 private immutable _creationCodeSizeA;
 
@@ -178,7 +176,6 @@ abstract contract BaseSplitCodeFactory {
 
         if (destination == address(0)) {
             // Bubble up inner revert reason
-            // solhint-disable-next-line no-inline-assembly
             assembly {
                 returndatacopy(0, 0, returndatasize())
                 revert(0, returndatasize())
