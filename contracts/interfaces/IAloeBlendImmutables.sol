@@ -20,12 +20,12 @@ interface IAloeBlendImmutables {
     /// incentivization, multiplied by K.
     function K() external view returns (uint8);
 
-    /// @notice The number of standard deviations to +/- from mean when setting primary Uniswap position
+    /// @notice The number of standard deviations (from volatilityOracle) to +/- from mean when choosing
+    /// range for primary Uniswap position
     function B() external view returns (uint8);
 
-    /// @notice The denominator applied to primary Uniswap earnings to determine what portion goes to maintenance budget
-    /// @dev For example, if this is 10, then *at most* 1/10th of revenue from the primary Uniswap position will be
-    /// added to the maintenance budget.
+    /// @notice The denominator applied to all earnings to determine what portion goes to maintenance budget
+    /// @dev For example, if this is 10, then *at most* 1/10th of all revenue will be added to the maintenance budget.
     function MAINTENANCE_FEE() external view returns (uint8);
 
     /// @notice The percentage of funds (in basis points) that will be left in the contract after the primary Uniswap
