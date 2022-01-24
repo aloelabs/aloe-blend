@@ -36,7 +36,7 @@ contract FactoryTest is DSTest {
     }
 
     function testFail_createSameVaultTwice() public {
-        IAloeBlend blend = factory.createVault(
+        factory.createVault(
             IUniswapV3Pool(0xF1B63cD9d80f922514c04b0fD0a30373316dd75b),
             ISilo(0x8E35ec3f2C8e14bf7A0E67eA6667F6965938aD2d),
             ISilo(0x908f6DF3df3c25365172F350670d055541Ec362E)

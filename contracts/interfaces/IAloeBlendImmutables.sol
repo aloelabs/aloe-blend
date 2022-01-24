@@ -10,15 +10,20 @@ interface IAloeBlendImmutables {
     function RECENTERING_INTERVAL() external view returns (uint24);
 
     /// @notice The minimum width (in ticks) of the primary Uniswap position
-    function MIN_WIDTH() external view returns (uint24);
+    function MIN_WIDTH() external view returns (int24);
 
     /// @notice The maximum width (in ticks) of the primary Uniswap position
-    function MAX_WIDTH() external view returns (uint24);
+    function MAX_WIDTH() external view returns (int24);
 
     /// @notice The maintenance budget buffer multiplier
     /// @dev The vault will attempt to build up a maintenance budget equal to the average cost of rebalance
     /// incentivization, multiplied by K.
     function K() external view returns (uint8);
+
+    /// @notice If the maintenance budget drops below [its maximum size ➗ this value], `maintenanceIsSustainable` will
+    /// become false. During the next rebalance, this will cause the primary Uniswap position to expand to its maximum
+    /// width -- de-risking the vault until it has time to rebuild the maintenance budget.
+    function L() external view returns (uint8);
 
     /// @notice The number of standard deviations (from volatilityOracle) to +/- from mean when choosing
     /// range for primary Uniswap position
