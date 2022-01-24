@@ -27,6 +27,7 @@ interface IWETH {
 IWETH constant WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
 contract CompoundCEtherSilo is ISilo {
+    /// @inheritdoc ISilo
     string public constant name = "Compound WETH Silo";
 
     ICEther public immutable cEther;
@@ -35,16 +36,19 @@ contract CompoundCEtherSilo is ISilo {
         cEther = _cEther;
     }
 
+    /// @inheritdoc ISilo
     function poke() external override {
         cEther.accrueInterest();
     }
 
+    /// @inheritdoc ISilo
     function deposit(uint256 amount) external override {
         if (amount == 0) return;
         WETH.withdraw(amount);
         cEther.mint{value: amount}();
     }
 
+    /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
         uint256 cAmount = 1 + FullMath.mulDiv(amount, 1e18, cEther.exchangeRateStored());
@@ -53,10 +57,12 @@ contract CompoundCEtherSilo is ISilo {
         WETH.deposit{value: amount}();
     }
 
+    /// @inheritdoc ISilo
     function balanceOf(address account) external view override returns (uint256 balance) {
         return FullMath.mulDiv(cEther.balanceOf(account), cEther.exchangeRateStored(), 1e18);
     }
 
+    /// @inheritdoc ISilo
     function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != address(cEther);
     }

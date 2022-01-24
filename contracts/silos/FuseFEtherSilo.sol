@@ -29,6 +29,7 @@ interface IWETH {
 IWETH constant WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
 contract FuseFEtherSilo is ISilo {
+    /// @inheritdoc ISilo
     string public constant name = "Rari Fuse WETH Silo";
 
     IFEther public immutable fEther;
@@ -38,16 +39,19 @@ contract FuseFEtherSilo is ISilo {
         fEther = _fEther;
     }
 
+    /// @inheritdoc ISilo
     function poke() external override {
         fEther.accrueInterest();
     }
 
+    /// @inheritdoc ISilo
     function deposit(uint256 amount) external override {
         if (amount == 0) return;
         WETH.withdraw(amount);
         fEther.mint{value: amount}();
     }
 
+    /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
         uint256 fAmount = 1 + FullMath.mulDiv(amount, 1e18, fEther.exchangeRateStored());
@@ -56,10 +60,12 @@ contract FuseFEtherSilo is ISilo {
         WETH.deposit{value: amount}();
     }
 
+    /// @inheritdoc ISilo
     function balanceOf(address account) external view override returns (uint256 balance) {
         return FullMath.mulDiv(fEther.balanceOf(account), fEther.exchangeRateStored(), 1e18);
     }
 
+    /// @inheritdoc ISilo
     function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != address(fEther);
     }
