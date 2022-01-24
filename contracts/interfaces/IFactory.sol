@@ -10,7 +10,11 @@ interface IFactory {
     function volatilityOracle() external view returns (IVolatilityOracle);
 
     /// @notice Reports the vault's address (if one exists for the chosen parameters)
-    function getVault(IUniswapV3Pool pool, ISilo silo0, ISilo silo1) external view returns (IAloeBlend);
+    function getVault(
+        IUniswapV3Pool pool,
+        ISilo silo0,
+        ISilo silo1
+    ) external view returns (IAloeBlend);
 
     /// @notice Reports whether the given vault was deployed by this factory
     function didCreateVault(IAloeBlend vault) external view returns (bool);

@@ -21,7 +21,8 @@ interface ICToken {
 }
 
 contract CompoundCTokenSilo is ISilo {
-    string public override name;
+    /// @inheritdoc ISilo
+    string public name;
 
     address public immutable cToken;
 
@@ -34,16 +35,19 @@ contract CompoundCTokenSilo is ISilo {
         name = string(abi.encodePacked("Compound ", IERC20Metadata(uToken).symbol(), " Silo"));
     }
 
+    /// @inheritdoc ISilo
     function poke() external override {
         ICToken(cToken).accrueInterest();
     }
 
+    /// @inheritdoc ISilo
     function deposit(uint256 amount) external override {
         if (amount == 0) return;
         _approve(uToken, cToken, amount);
         require(ICToken(cToken).mint(amount) == 0, "Compound: mint failed");
     }
 
+    /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
         uint256 cAmount = 1 + FullMath.mulDiv(amount, 1e18, ICToken(cToken).exchangeRateStored());
@@ -51,11 +55,13 @@ contract CompoundCTokenSilo is ISilo {
         require(ICToken(cToken).redeem(cAmount) == 0, "Compound: redeem failed");
     }
 
+    /// @inheritdoc ISilo
     function balanceOf(address account) external view override returns (uint256 balance) {
         ICToken _cToken = ICToken(cToken);
         return FullMath.mulDiv(_cToken.balanceOf(account), _cToken.exchangeRateStored(), 1e18);
     }
 
+    /// @inheritdoc ISilo
     function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != cToken;
     }

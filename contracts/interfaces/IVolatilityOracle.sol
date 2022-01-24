@@ -14,7 +14,7 @@ interface IVolatilityOracle {
      * @return gamma1 The pool fee minus the protocol fee on token1, scaled by 1e6
      * @return tickSpacing The pool's tick spacing
      */
-    function cachedPoolMetadata(address pool)
+    function cachedPoolMetadata(IUniswapV3Pool pool)
         external
         view
         returns (
@@ -33,7 +33,7 @@ interface IVolatilityOracle {
      * @return feeGrowthGlobal1X128 Total pool revenue in token1, as of timestamp
      * @return timestamp The time at which snapshot was taken and stored
      */
-    function feeGrowthGlobals(address pool, uint256 idx)
+    function feeGrowthGlobals(IUniswapV3Pool pool, uint256 idx)
         external
         view
         returns (
@@ -48,7 +48,7 @@ interface IVolatilityOracle {
      * @return read The index that was closest to 24 hours old last time `estimate24H` was called
      * @return write The index that was written to last time `estimate24H` was called
      */
-    function feeGrowthGlobalsIndices(address pool) external view returns (uint8 read, uint8 write);
+    function feeGrowthGlobalsIndices(IUniswapV3Pool pool) external view returns (uint8 read, uint8 write);
 
     /**
      * @notice Updates cached metadata for a Uniswap pool. Must be called at least once
