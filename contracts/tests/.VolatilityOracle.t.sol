@@ -31,7 +31,7 @@ contract VolatilityOracleTest is DSTest {
     function test_cacheMetadataFor() public {
         volatilityOracle.cacheMetadataFor(pool);
         (uint32 maxSecondsAgo, uint24 gamma0, uint24 gamma1, int24 tickSpacing) = volatilityOracle.cachedPoolMetadata(
-            address(pool)
+            pool
         );
 
         assertEq(maxSecondsAgo, 95185);
@@ -64,7 +64,7 @@ contract VolatilityOracleTest is DSTest {
         assertEq(IV, 41376993386267);
 
         (uint256 feeGrowthGlobal0, uint256 feeGrowthGlobal1, uint256 timestamp) = volatilityOracle.feeGrowthGlobals(
-            address(pool),
+            pool,
             1
         );
         assertEq(feeGrowthGlobal0, 785983140346722755185121678846038);
@@ -83,9 +83,9 @@ contract VolatilityOracleTest is DSTest {
         uint256 IV2 = volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
         assertEq(IV2, 0);
 
-        (, , uint256 timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), 1);
+        (, , uint256 timestamp) = volatilityOracle.feeGrowthGlobals(pool, 1);
         assertEq(timestamp, 1639531906);
-        (, , timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), 2);
+        (, , timestamp) = volatilityOracle.feeGrowthGlobals(pool, 2);
         assertEq(timestamp, 0);
 
         hevm.warp(block.timestamp + 31 minutes);
@@ -93,9 +93,9 @@ contract VolatilityOracleTest is DSTest {
 
         volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
 
-        (, , timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), 1);
+        (, , timestamp) = volatilityOracle.feeGrowthGlobals(pool, 1);
         assertEq(timestamp, 1639531906);
-        (, , timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), 2);
+        (, , timestamp) = volatilityOracle.feeGrowthGlobals(pool, 2);
         assertEq(timestamp, 1639535566);
     }
 
@@ -109,18 +109,18 @@ contract VolatilityOracleTest is DSTest {
 
         for (uint8 i; i < 28; i++) {
             volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
-            (readIndex, writeIndex) = volatilityOracle.feeGrowthGlobalsIndices(address(pool));
+            (readIndex, writeIndex) = volatilityOracle.feeGrowthGlobalsIndices(pool);
 
             if (i == 0) assertEq(readIndex, 0);
             else if (i < 25) assertEq(readIndex, 1);
             else assertEq(readIndex, (i + 2) % 25);
             assertEq(writeIndex, (i + 1) % 25);
 
-            (, , timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), writeIndex);
+            (, , timestamp) = volatilityOracle.feeGrowthGlobals(pool, writeIndex);
             assertEq(timestamp, block.timestamp);
 
             if (i >= 24) {
-                (, , timestamp) = volatilityOracle.feeGrowthGlobals(address(pool), readIndex);
+                (, , timestamp) = volatilityOracle.feeGrowthGlobals(pool, readIndex);
                 assertEq(block.timestamp - timestamp, 24 hours + 24 minutes);
             }
 
@@ -144,7 +144,7 @@ contract VolatilityOracleTest is DSTest {
         hevm.warp(block.timestamp + 24 hours);
         volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
 
-        (uint8 readIndex, ) = volatilityOracle.feeGrowthGlobalsIndices(address(pool));
+        (uint8 readIndex, ) = volatilityOracle.feeGrowthGlobalsIndices(pool);
         assertEq(readIndex, 3);
     }
 }
