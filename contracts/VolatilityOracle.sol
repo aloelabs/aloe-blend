@@ -35,20 +35,20 @@ contract VolatilityOracle is IVolatilityOracle {
     }
 
     /// @inheritdoc IVolatilityOracle
-    mapping(address => Volatility.PoolMetadata) public cachedPoolMetadata;
+    mapping(IUniswapV3Pool => Volatility.PoolMetadata) public cachedPoolMetadata;
 
     /// @inheritdoc IVolatilityOracle
-    mapping(address => Volatility.FeeGrowthGlobals[25]) public feeGrowthGlobals;
+    mapping(IUniswapV3Pool => Volatility.FeeGrowthGlobals[25]) public feeGrowthGlobals;
 
     /// @inheritdoc IVolatilityOracle
-    mapping(address => Indices) public feeGrowthGlobalsIndices;
+    mapping(IUniswapV3Pool => Indices) public feeGrowthGlobalsIndices;
 
     /// @inheritdoc IVolatilityOracle
     function cacheMetadataFor(IUniswapV3Pool pool) external {
         Volatility.PoolMetadata memory poolMetadata;
 
         (, , uint16 observationIndex, uint16 observationCardinality, , uint8 feeProtocol, ) = pool.slot0();
-        poolMetadata.maxSecondsAgo = Oracle.getMaxSecondsAgo(pool, observationIndex, observationCardinality) * 4 / 5;
+        poolMetadata.maxSecondsAgo = (Oracle.getMaxSecondsAgo(pool, observationIndex, observationCardinality) * 4) / 5;
 
         uint24 fee = pool.fee();
         poolMetadata.gamma0 = fee;
@@ -58,13 +58,13 @@ contract VolatilityOracle is IVolatilityOracle {
 
         poolMetadata.tickSpacing = pool.tickSpacing();
 
-        cachedPoolMetadata[address(pool)] = poolMetadata;
+        cachedPoolMetadata[pool] = poolMetadata;
     }
 
     /// @inheritdoc IVolatilityOracle
     function lens(IUniswapV3Pool pool) external view returns (uint256[25] memory IV) {
         (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
-        Volatility.FeeGrowthGlobals[25] memory feeGrowthGlobal = feeGrowthGlobals[address(pool)];
+        Volatility.FeeGrowthGlobals[25] memory feeGrowthGlobal = feeGrowthGlobals[pool];
 
         for (uint8 i = 0; i < 25; i++) {
             (IV[i], ) = _estimate24H(pool, sqrtPriceX96, tick, feeGrowthGlobal[i]);
@@ -77,7 +77,7 @@ contract VolatilityOracle is IVolatilityOracle {
         uint160 sqrtPriceX96,
         int24 tick
     ) external returns (uint256 IV) {
-        Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal = feeGrowthGlobals[address(pool)];
+        Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal = feeGrowthGlobals[pool];
         Indices memory idxs = _loadIndicesAndSelectRead(pool, feeGrowthGlobal);
 
         Volatility.FeeGrowthGlobals memory current;
@@ -86,9 +86,9 @@ contract VolatilityOracle is IVolatilityOracle {
         // Write to storage
         if (current.timestamp - 1 hours > feeGrowthGlobal[idxs.write].timestamp) {
             idxs.write = (idxs.write + 1) % 25;
-            feeGrowthGlobals[address(pool)][idxs.write] = current;
+            feeGrowthGlobals[pool][idxs.write] = current;
         }
-        feeGrowthGlobalsIndices[address(pool)] = idxs;
+        feeGrowthGlobalsIndices[pool] = idxs;
     }
 
     function _estimate24H(
@@ -97,7 +97,7 @@ contract VolatilityOracle is IVolatilityOracle {
         int24 _tick,
         Volatility.FeeGrowthGlobals memory _previous
     ) private view returns (uint256 IV, Volatility.FeeGrowthGlobals memory current) {
-        Volatility.PoolMetadata memory poolMetadata = cachedPoolMetadata[address(_pool)];
+        Volatility.PoolMetadata memory poolMetadata = cachedPoolMetadata[_pool];
 
         uint32 secondsAgo = poolMetadata.maxSecondsAgo;
         require(secondsAgo >= 1 hours, "Aloe: need more data");
@@ -130,7 +130,7 @@ contract VolatilityOracle is IVolatilityOracle {
         view
         returns (Indices memory)
     {
-        Indices memory idxs = feeGrowthGlobalsIndices[address(_pool)];
+        Indices memory idxs = feeGrowthGlobalsIndices[_pool];
         uint32 timingError = _timingError(block.timestamp - _feeGrowthGlobal[idxs.read].timestamp);
 
         for (uint8 counter = idxs.read + 1; counter < idxs.read + 25; counter++) {

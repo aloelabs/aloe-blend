@@ -23,6 +23,7 @@ interface IFToken {
 }
 
 contract FuseFTokenSilo is ISilo {
+    /// @inheritdoc ISilo
     string public name;
 
     address public immutable fToken;
@@ -37,16 +38,19 @@ contract FuseFTokenSilo is ISilo {
         name = string(abi.encodePacked("Rari Fuse ", IERC20Metadata(uToken).symbol(), " Silo"));
     }
 
+    /// @inheritdoc ISilo
     function poke() external override {
         IFToken(fToken).accrueInterest();
     }
 
+    /// @inheritdoc ISilo
     function deposit(uint256 amount) external override {
         if (amount == 0) return;
         _approve(uToken, fToken, amount);
         require(IFToken(fToken).mint(amount) == 0, "Fuse: mint failed");
     }
 
+    /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
         uint256 fAmount = 1 + FullMath.mulDiv(amount, 1e18, IFToken(fToken).exchangeRateStored());
@@ -54,11 +58,13 @@ contract FuseFTokenSilo is ISilo {
         require(IFToken(fToken).redeem(fAmount) == 0, "Fuse: redeem failed");
     }
 
+    /// @inheritdoc ISilo
     function balanceOf(address account) external view override returns (uint256 balance) {
         IFToken _fToken = IFToken(fToken);
         return FullMath.mulDiv(_fToken.balanceOf(account), _fToken.exchangeRateStored(), 1e18);
     }
 
+    /// @inheritdoc ISilo
     function shouldAllowRemovalOf(address token) external view override returns (bool shouldAllow) {
         shouldAllow = token != fToken;
     }
