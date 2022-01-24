@@ -12,6 +12,7 @@ interface IAloeBlendState {
      * @return limitLower The limit order's lower tick bound
      * @return limitUpper The limit order's upper tick bound
      * @return recenterTimestamp The `block.timestamp` from the last time the primary position moved
+     * @return maxRebalanceGas The (approximate) maximum amount of gas that has ever been used to `rebalance()` this vault
      * @return maintenanceIsSustainable Whether `maintenanceBudget0` or `maintenanceBudget1` has filled up according to `K`
      * @return locked Whether the vault is currently locked to reentrancy
      */
@@ -24,6 +25,7 @@ interface IAloeBlendState {
             int24 limitLower,
             int24 limitUpper,
             uint48 recenterTimestamp,
+            uint32 maxRebalanceGas,
             bool maintenanceIsSustainable,
             bool locked
         );

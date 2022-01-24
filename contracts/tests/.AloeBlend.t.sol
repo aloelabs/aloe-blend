@@ -20,14 +20,7 @@ contract AloeBlendFake is AloeBlend {
         uint256 inventory0,
         uint256 inventory1,
         int24 halfWidth
-    )
-        external
-        pure
-        returns (
-            uint256,
-            uint256
-        )
-    {
+    ) external pure returns (uint256, uint256) {
         return _computeMagicAmounts(inventory0, inventory1, halfWidth);
     }
 
@@ -133,11 +126,7 @@ contract AloeBlendTest is DSTest {
         if (int24(halfWidth) < blend.MIN_WIDTH() / 2) return;
         if (int24(halfWidth) > blend.MAX_WIDTH() / 2) return;
 
-        (uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(
-            inventory0,
-            inventory1,
-            int24(halfWidth)
-        );
+        (uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(inventory0, inventory1, int24(halfWidth));
 
         assertLt(amount0, inventory0);
         assertLt(amount1, inventory1);
