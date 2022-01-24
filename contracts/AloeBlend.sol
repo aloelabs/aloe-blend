@@ -594,8 +594,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         uint256[14] storage array = gasPriceArrays[_token];
         uint8 idx = gasPriceIdxs[_token];
         unchecked {
+            uint256 average = gasPrices[_token];
+            uint256 maxDelta = average / 10;
+            if (_gasPrice < average - maxDelta) _gasPrice = average - maxDelta;
+            else if (_gasPrice > average + maxDelta) _gasPrice = average + maxDelta;
+
             _gasPrice /= 14;
-            gasPrices[_token] = gasPrices[_token] + _gasPrice - array[idx];
+            gasPrices[_token] = average + _gasPrice - array[idx];
             array[idx] = _gasPrice;
             gasPriceIdxs[_token] = (idx + 1) % 14;
         }
