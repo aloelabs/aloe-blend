@@ -209,6 +209,7 @@ library TickMath {
     /// @param tick The tick to round
     /// @param tickSpacing The tick spacing to round to
     /// @return the floored tick
+    /// @dev Ensure tick +/- tickSpacing does not overflow or underflow int24
     function floor(int24 tick, int24 tickSpacing) internal pure returns (int24) {
         int24 mod = tick % tickSpacing;
 
@@ -222,6 +223,7 @@ library TickMath {
     /// @param tick The tick to round
     /// @param tickSpacing The tick spacing to round to
     /// @return the ceiled tick
+    /// @dev Ensure tick +/- tickSpacing does not overflow or underflow int24
     function ceil(int24 tick, int24 tickSpacing) internal pure returns (int24) {
         int24 mod = tick % tickSpacing;
 

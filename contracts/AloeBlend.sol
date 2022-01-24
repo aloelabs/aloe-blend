@@ -57,7 +57,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     uint8 public constant K = 10; // maintenance budget should cover at least 10 rebalances
 
     /// @inheritdoc IAloeBlendImmutables
-    uint8 public constant B = 2; // primary Uniswap position should cover 95% of trading activity
+    uint8 public constant B = 2; // primary Uniswap position should cover 95% (2 std. dev.) of trading activity
 
     /// @inheritdoc IAloeBlendImmutables
     uint8 public constant MAINTENANCE_FEE = 10; // 1/10th of earnings from primary Uniswap position
@@ -347,10 +347,10 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
                 uint256 balance1 = _balance1();
                 if (balance1 < amount1) amount1 = balance1 + _silo1Withdraw(amount1 - balance1);
             }
-            // Place a new limit order and store bounds
+            // Place a new limit order
             limit.deposit(limit.liquidityForAmount1(amount1));
         } else if (ratio > 5100) {
-            // Attempt to sell token1 for token0. Choose limit order bounds above the market price. Disable
+            // Attempt to sell token0 for token1. Choose limit order bounds above the market price. Disable
             // incentive if removing & replacing in the same spot
             limit.lower = TickMath.ceil(cache.tick, TICK_SPACING);
             if (d.limitLiquidity != 0 && limit.upper == limit.lower + TICK_SPACING) urgency = 0;
@@ -366,7 +366,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
                 uint256 balance0 = _balance0();
                 if (balance0 < amount0) amount0 = balance0 + _silo0Withdraw(amount0 - balance0);
             }
-            // Place a new limit order and store bounds
+            // Place a new limit order
             limit.deposit(limit.liquidityForAmount0(amount0));
         } else {
             // Zero-out the limit struct to indicate that it's inactive
@@ -392,7 +392,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     /**
      * @notice Recenters the primary Uniswap position around the current tick. Deposits leftover funds into the silos.
      * @dev This function assumes that the limit order has no liquidity (never existed or already exited)
-     * @param _cache The rebalance cache, populated with *at least* sqrtPriceX96, priceX96, and tick
+     * @param _cache The rebalance cache, populated with sqrtPriceX96, priceX96, and tick
      * @param _primary The existing primary Uniswap position
      * @param _primaryLiquidity The amount of liquidity currently in `_primary`
      * @param _inventory0 The amount of token0 underlying all LP tokens. MUST BE <= THE TRUE VALUE. No overestimates!
@@ -417,9 +417,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         }
 
         // Decide primary position width...
-        uint24 w = _maintenanceIsSustainable
+        int24 w = _maintenanceIsSustainable
             ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick))
-            : MAX_WIDTH;
+            : int24(MAX_WIDTH);
         w = w >> 1;
         // ...and compute amounts that should be placed inside
         (, uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, w);
@@ -431,20 +431,22 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
             balance0 = int256(_balance0()) - int256(FullMath.mulDiv(_inventory0, FLOAT_PERCENTAGE, 10_000));
             balance1 = int256(_balance1()) - int256(FullMath.mulDiv(_inventory1, FLOAT_PERCENTAGE, 10_000));
             if (balance0 < int256(amount0)) {
-                _inventory0 = 0; // reusing variable to avoid stack too deep
+                _inventory0 = 0; // reuse var to avoid stack too deep. now a flag, 0 means we withdraw from silo0
                 amount0 = uint256(balance0 + int256(_silo0Withdraw(uint256(int256(amount0) - balance0))));
             }
             if (balance1 < int256(amount1)) {
-                _inventory1 = 0; // reusing variable to avoid stack too deep 
+                _inventory1 = 0; // reuse var to avoid stack too deep. now a flag, 0 means we withdraw from silo1
                 amount1 = uint256(balance1 + int256(_silo1Withdraw(uint256(int256(amount1) - balance1))));
             }
         }
 
         // Update primary position's ticks
-        _primary.lower = TickMath.floor(_cache.tick - int24(w), TICK_SPACING);
-        _primary.upper = TickMath.ceil(_cache.tick + int24(w), TICK_SPACING);
-        if (_primary.lower < MIN_TICK) _primary.lower = MIN_TICK;
-        if (_primary.upper > MAX_TICK) _primary.upper = MAX_TICK;
+        unchecked {
+            _primary.lower = TickMath.floor(_cache.tick - w, TICK_SPACING);
+            _primary.upper = TickMath.ceil(_cache.tick + w, TICK_SPACING);
+            if (_primary.lower < MIN_TICK) _primary.lower = MIN_TICK;
+            if (_primary.upper > MAX_TICK) _primary.upper = MAX_TICK;
+        }
 
         // Place some liquidity in Uniswap
         (amount0, amount1) = _primary.deposit(_primary.liquidityForAmounts(_cache.sqrtPriceX96, amount0, amount1));
@@ -729,14 +731,14 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     // ⬇️⬇️⬇️⬇️ PURE FUNCTIONS ⬇️⬇️⬇️⬇️  ------------------------------------------------------------------------------
 
     /// @dev Computes position width based on volatility. Doesn't revert
-    function _computeNextPositionWidth(uint256 _sigma) internal pure returns (uint24) {
+    function _computeNextPositionWidth(uint256 _sigma) internal pure returns (int24) {
         if (_sigma <= 1.00481445e16) return MIN_WIDTH;
         if (_sigma >= 4.41180492e17) return MAX_WIDTH;
         _sigma *= B; // scale by a constant factor to increase confidence
 
         unchecked {
             uint160 ratio = uint160((Q96 * (1e18 + _sigma)) / (1e18 - _sigma));
-            return uint24(TickMath.getTickAtSqrtRatio(ratio)) >> 1;
+            return TickMath.getTickAtSqrtRatio(ratio) >> 1;
         }
     }
 
@@ -745,17 +747,10 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     function _computeMagicAmounts(
         uint256 _inventory0,
         uint256 _inventory1,
-        uint24 _halfWidth
-    )
-        internal
-        pure
-        returns (
-            uint96 magic,
-            uint256 amount0,
-            uint256 amount1
-        )
-    {
-        magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-int24(_halfWidth)));
+        int24 _halfWidth
+    ) internal pure returns (uint256 amount0, uint256 amount1) {
+        // the fraction of total inventory (X96) that should be put into primary Uniswap order to mimic Uniswap v2
+        uint96 magic = uint96(Q96 - TickMath.getSqrtRatioAtTick(-_halfWidth));
         amount0 = FullMath.mulDiv(_inventory0, magic, Q96);
         amount1 = FullMath.mulDiv(_inventory1, magic, Q96);
     }

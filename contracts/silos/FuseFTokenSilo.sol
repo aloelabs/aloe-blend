@@ -23,7 +23,7 @@ interface IFToken {
 }
 
 contract FuseFTokenSilo is ISilo {
-    string public override name;
+    string public name;
 
     address public immutable fToken;
 
