@@ -30,6 +30,10 @@ interface IAloeBlendImmutables {
     /// range for primary Uniswap position
     function B() external view returns (uint8);
 
+    /// @notice The constraint factor for new gas price observations. The new observation cannot be less than (1 - 1/D)
+    /// times the previous average.
+    function D() external view returns (uint8);
+
     /// @notice The denominator applied to all earnings to determine what portion goes to maintenance budget
     /// @dev For example, if this is 10, then *at most* 1/10th of all revenue will be added to the maintenance budget.
     function MAINTENANCE_FEE() external view returns (uint8);

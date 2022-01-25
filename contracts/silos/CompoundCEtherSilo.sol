@@ -13,7 +13,7 @@ interface ICEther {
 
     function mint() external payable;
 
-    function redeem(uint256 redeemTokens) external returns (uint256);
+    function redeemUnderlying(uint256 redeemAmount) external returns (uint256);
 
     function balanceOf(address account) external view returns (uint256);
 }
@@ -51,9 +51,7 @@ contract CompoundCEtherSilo is ISilo {
     /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
-        uint256 cAmount = 1 + FullMath.mulDiv(amount, 1e18, cEther.exchangeRateStored());
-
-        require(cEther.redeem(cAmount) == 0, "Compound: redeem ETH failed");
+        require(cEther.redeemUnderlying(amount) == 0, "Compound: redeem ETH failed");
         WETH.deposit{value: amount}();
     }
 

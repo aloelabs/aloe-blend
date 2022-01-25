@@ -13,7 +13,7 @@ interface ICToken {
 
     function mint(uint256 mintAmount) external returns (uint256);
 
-    function redeem(uint256 redeemTokens) external returns (uint256);
+    function redeemUnderlying(uint256 redeemAmount) external returns (uint256);
 
     function balanceOf(address account) external view returns (uint256);
 
@@ -50,9 +50,7 @@ contract CompoundCTokenSilo is ISilo {
     /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
-        uint256 cAmount = 1 + FullMath.mulDiv(amount, 1e18, ICToken(cToken).exchangeRateStored());
-
-        require(ICToken(cToken).redeem(cAmount) == 0, "Compound: redeem failed");
+        require(ICToken(cToken).redeemUnderlying(amount) == 0, "Compound: redeem failed");
     }
 
     /// @inheritdoc ISilo

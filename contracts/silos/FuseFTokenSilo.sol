@@ -13,7 +13,7 @@ interface IFToken {
 
     function mint(uint256 mintAmount) external returns (uint256);
 
-    function redeem(uint256 redeemTokens) external returns (uint256);
+    function redeemUnderlying(uint256 redeemAmount) external returns (uint256);
 
     function balanceOf(address account) external view returns (uint256);
 
@@ -53,9 +53,7 @@ contract FuseFTokenSilo is ISilo {
     /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
-        uint256 fAmount = 1 + FullMath.mulDiv(amount, 1e18, IFToken(fToken).exchangeRateStored());
-
-        require(IFToken(fToken).redeem(fAmount) == 0, "Fuse: redeem failed");
+        require(IFToken(fToken).redeemUnderlying(amount) == 0, "Fuse: redeem failed");
     }
 
     /// @inheritdoc ISilo
