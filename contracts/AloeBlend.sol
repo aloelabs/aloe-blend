@@ -432,7 +432,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
 
         // Decide primary position width...
         int24 w = _maintenanceIsSustainable
-            ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL, _cache.sqrtPriceX96, _cache.tick))
+            ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL))
             : int24(MAX_WIDTH);
         w = w >> 1;
         // ...and compute amounts that should be placed inside

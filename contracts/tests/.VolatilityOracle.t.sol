@@ -45,22 +45,20 @@ contract VolatilityOracleTest is DSTest {
 
         uint256 gas = gasleft();
         volatilityOracle.lens(pool);
-        assertEq(gas - gasleft(), 725213);
+        assertEq(gas - gasleft(), 725219);
     }
 
     function test_estimate24H_gas() public {
         volatilityOracle.cacheMetadataFor(pool);
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
 
         uint256 gas = gasleft();
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
-        assertEq(gas - gasleft(), 132272);
+        volatilityOracle.estimate24H(pool);
+        assertEq(gas - gasleft(), 133712);
     }
 
     function test_estimate24H_1() public {
         volatilityOracle.cacheMetadataFor(pool);
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
-        uint256 IV = volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        uint256 IV = volatilityOracle.estimate24H(pool);
         assertEq(IV, 41376993386267);
 
         (uint256 feeGrowthGlobal0, uint256 feeGrowthGlobal1, uint256 timestamp) = volatilityOracle.feeGrowthGlobals(
@@ -74,13 +72,12 @@ contract VolatilityOracleTest is DSTest {
 
     function test_estimate24H_2() public {
         volatilityOracle.cacheMetadataFor(pool);
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
-        uint256 IV1 = volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        uint256 IV1 = volatilityOracle.estimate24H(pool);
         assertEq(IV1, 41376993386267);
 
         hevm.warp(block.timestamp + 30 minutes);
 
-        uint256 IV2 = volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        uint256 IV2 = volatilityOracle.estimate24H(pool);
         assertEq(IV2, 0);
 
         (, , uint256 timestamp) = volatilityOracle.feeGrowthGlobals(pool, 1);
@@ -91,7 +88,7 @@ contract VolatilityOracleTest is DSTest {
         hevm.warp(block.timestamp + 31 minutes);
         assertEq(block.timestamp, 1639535566);
 
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        volatilityOracle.estimate24H(pool);
 
         (, , timestamp) = volatilityOracle.feeGrowthGlobals(pool, 1);
         assertEq(timestamp, 1639531906);
@@ -101,14 +98,13 @@ contract VolatilityOracleTest is DSTest {
 
     function test_estimate24H_3() public {
         volatilityOracle.cacheMetadataFor(pool);
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
 
         uint256 timestamp;
         uint8 readIndex;
         uint8 writeIndex;
 
         for (uint8 i; i < 28; i++) {
-            volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+            volatilityOracle.estimate24H(pool);
             (readIndex, writeIndex) = volatilityOracle.feeGrowthGlobalsIndices(pool);
 
             if (i == 0) assertEq(readIndex, 0);
@@ -128,21 +124,20 @@ contract VolatilityOracleTest is DSTest {
         }
 
         uint256 gas = gasleft();
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
-        assertEq(gas - gasleft(), 25215);
+        volatilityOracle.estimate24H(pool);
+        assertEq(gas - gasleft(), 26659);
     }
 
     function test_estimate24H_4() public {
         volatilityOracle.cacheMetadataFor(pool);
-        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
 
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        volatilityOracle.estimate24H(pool);
         hevm.warp(block.timestamp + 61 minutes);
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        volatilityOracle.estimate24H(pool);
         hevm.warp(block.timestamp + 61 minutes);
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        volatilityOracle.estimate24H(pool);
         hevm.warp(block.timestamp + 24 hours);
-        volatilityOracle.estimate24H(pool, sqrtPriceX96, tick);
+        volatilityOracle.estimate24H(pool);
 
         (uint8 readIndex, ) = volatilityOracle.feeGrowthGlobalsIndices(pool);
         assertEq(readIndex, 3);

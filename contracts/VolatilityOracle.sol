@@ -72,11 +72,9 @@ contract VolatilityOracle is IVolatilityOracle {
     }
 
     /// @inheritdoc IVolatilityOracle
-    function estimate24H(
-        IUniswapV3Pool pool,
-        uint160 sqrtPriceX96,
-        int24 tick
-    ) external returns (uint256 IV) {
+    function estimate24H(IUniswapV3Pool pool) external returns (uint256 IV) {
+        (uint160 sqrtPriceX96, int24 tick, , , , , ) = pool.slot0();
+
         Volatility.FeeGrowthGlobals[25] storage feeGrowthGlobal = feeGrowthGlobals[pool];
         Indices memory idxs = _loadIndicesAndSelectRead(pool, feeGrowthGlobal);
 

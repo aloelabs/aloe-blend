@@ -70,13 +70,7 @@ interface IVolatilityOracle {
     /**
      * @notice Estimates 24-hour implied volatility for a Uniswap pool.
      * @param pool The pool to use for volatility estimate
-     * @param sqrtPriceX96 The pool's current sqrtRatio, from pool.slot0()
-     * @param tick The pool's current tick, from pool.slot0()
      * @return IV The estimated volatility, scaled by 1e18
      */
-    function estimate24H(
-        IUniswapV3Pool pool,
-        uint160 sqrtPriceX96,
-        int24 tick
-    ) external returns (uint256 IV);
+    function estimate24H(IUniswapV3Pool pool) external returns (uint256 IV);
 }
