@@ -64,6 +64,9 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
     uint8 public constant B = 2; // primary Uniswap position should cover 95% (2 std. dev.) of trading activity
 
     /// @inheritdoc IAloeBlendImmutables
+    uint8 public constant D = 10; // new gas price observations must not be less than [avg - avg/10]
+
+    /// @inheritdoc IAloeBlendImmutables
     uint8 public constant MAINTENANCE_FEE = 10; // 1/10th of earnings from primary Uniswap position
 
     /// @inheritdoc IAloeBlendImmutables
@@ -594,8 +597,13 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         uint256[14] storage array = gasPriceArrays[_token];
         uint8 idx = gasPriceIdxs[_token];
         unchecked {
+            // New entry cannot be lower than 90% of the previous average
+            uint256 average = gasPrices[_token];
+            uint256 minimum = average - average / D;
+            if (_gasPrice < minimum) _gasPrice = minimum;
+
             _gasPrice /= 14;
-            gasPrices[_token] = gasPrices[_token] + _gasPrice - array[idx];
+            gasPrices[_token] = average + _gasPrice - array[idx];
             array[idx] = _gasPrice;
             gasPriceIdxs[_token] = (idx + 1) % 14;
         }

@@ -7,6 +7,7 @@ import "./IAloeBlendEvents.sol";
 import "./IAloeBlendImmutables.sol";
 import "./IAloeBlendState.sol";
 
+// solhint-disable no-empty-blocks
 /// @title Aloe Blend vault interface
 /// @dev The interface is broken up into many smaller pieces
 interface IAloeBlend is

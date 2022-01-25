@@ -4,6 +4,7 @@ pragma solidity ^0.8.10;
 import "./ISilo.sol";
 import "./IVolatilityOracle.sol";
 
+// solhint-disable func-name-mixedcase
 interface IAloeBlendImmutables {
     /// @notice The nominal time (in seconds) that the primary Uniswap position should stay in one place before
     /// being recentered
@@ -28,6 +29,10 @@ interface IAloeBlendImmutables {
     /// @notice The number of standard deviations (from volatilityOracle) to +/- from mean when choosing
     /// range for primary Uniswap position
     function B() external view returns (uint8);
+
+    /// @notice The constraint factor for new gas price observations. The new observation cannot be less than (1 - 1/D)
+    /// times the previous average.
+    function D() external view returns (uint8);
 
     /// @notice The denominator applied to all earnings to determine what portion goes to maintenance budget
     /// @dev For example, if this is 10, then *at most* 1/10th of all revenue will be added to the maintenance budget.
