@@ -63,7 +63,6 @@ library CodeDeployer {
     function deploy(bytes memory code) internal returns (address destination) {
         bytes32 deployerCreationCode = _DEPLOYER_CREATION_CODE;
 
-        // solhint-disable-next-line no-inline-assembly
         assembly {
             let codeLength := mload(code)
 

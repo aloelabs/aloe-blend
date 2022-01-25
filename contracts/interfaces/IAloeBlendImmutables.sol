@@ -4,6 +4,7 @@ pragma solidity ^0.8.10;
 import "./ISilo.sol";
 import "./IVolatilityOracle.sol";
 
+// solhint-disable func-name-mixedcase
 interface IAloeBlendImmutables {
     /// @notice The nominal time (in seconds) that the primary Uniswap position should stay in one place before
     /// being recentered
