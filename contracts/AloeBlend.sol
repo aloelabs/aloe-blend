@@ -158,6 +158,8 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         volatilityOracle = IFactory(msg.sender).volatilityOracle();
         silo0 = _silo0;
         silo1 = _silo1;
+
+        packedSlot.recenterTimestamp = uint48(block.timestamp);
     }
 
     /// @inheritdoc IAloeBlendActions
@@ -433,7 +435,7 @@ contract AloeBlend is AloeBlendERC20, UniswapHelper, IAloeBlend {
         // Decide primary position width...
         int24 w = _maintenanceIsSustainable
             ? _computeNextPositionWidth(volatilityOracle.estimate24H(UNI_POOL))
-            : int24(MAX_WIDTH);
+            : MAX_WIDTH;
         w = w >> 1;
         // ...and compute amounts that should be placed inside
         (uint256 amount0, uint256 amount1) = _computeMagicAmounts(_inventory0, _inventory1, w);
