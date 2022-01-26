@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.10;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-
 import "contracts/interfaces/ISilo.sol";
 
 contract NOPSilo is ISilo {
     /// @inheritdoc ISilo
-    string public name;
-
-    constructor(address _token) {
-        name = string(abi.encodePacked(IERC20Metadata(_token).symbol(), " no-op Silo"));
-    }
+    string public constant name = "No-Op Silo";
 
     /// @inheritdoc ISilo
     function poke() external override {}
