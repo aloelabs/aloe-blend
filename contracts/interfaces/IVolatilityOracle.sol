@@ -65,7 +65,7 @@ interface IVolatilityOracle {
      * @param pool The pool to use for volatility estimate
      * @return IV The array of volatility estimates, scaled by 1e18
      */
-    function lens(IUniswapV3Pool pool) external returns (uint256[25] memory IV);
+    function lens(IUniswapV3Pool pool) external view returns (uint256[25] memory IV);
 
     /**
      * @notice Estimates 24-hour implied volatility for a Uniswap pool.
