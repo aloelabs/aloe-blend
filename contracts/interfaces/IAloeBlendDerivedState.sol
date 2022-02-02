@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 interface IAloeBlendDerivedState {
     /**
-     * @notice Calculates the rebalance urgency. Caller's reward is proportional to this value.
+     * @notice Calculates the rebalance urgency. Caller's reward is proportional to this value. Target is 100000
      * @return urgency How badly the vault wants its `rebalance()` function to be called
      */
     function getRebalanceUrgency() external view returns (uint32 urgency);
