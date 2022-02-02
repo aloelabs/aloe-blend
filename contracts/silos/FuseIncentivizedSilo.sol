@@ -34,7 +34,7 @@ interface RewardsDistributor {
     function claimRewards(address[] memory holders, address[] memory fTokens, bool borrowers, bool suppliers) external;
 }
 
-contract FuseFTokenSilo is ISilo {
+contract FuseIncentivizedSilo is ISilo {
     /// @inheritdoc ISilo
     string public name;
 
