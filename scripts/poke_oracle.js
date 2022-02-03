@@ -44,4 +44,4 @@ pokeOracle([
   WBTC_ETH_005,
   FEI_TRIBE_005,
   DAI_USDC_001
-], 85e9);
+], 80e9);
