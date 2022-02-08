@@ -1,0 +1,47 @@
+name: etherscan-verify
+
+on: 
+  workflow_dispatch:
+    inputs:
+      contractPath:
+        description: 'Contract Path'     
+        required: true
+        default: 'contracts/AloeBlend.sol:AloeBlend'
+      contractAddress:
+        description: 'Contract Address'
+        require: true
+      constructorArgs:
+        description: 'Contract Constructor Arguments' 
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Fetch submodules
+      run: |
+        git submodule init
+        git submodule update
+
+    - name: Install Nix
+      run: curl -L https://nixos.org/nix/install | sh
+  
+    - name: Install dependencies
+      run: npm install
+
+    - name: Install dapptools and verify contract
+      env:
+        ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+        ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      run: |
+        . $HOME/.nix-profile/etc/profile.d/nix.sh
+        curl https://dapp.tools/install | sh
+        pwd
+        cat .dapprc
+        DAPP_LINK_TEST_LIBRARIES=0 dapp build
+        dapp verify-contract ${{ github.event.inputs.contractPath }} ${{ github.event.inputs.contractAddress }} ${{ github.event.inputs.constructorArgs }}
