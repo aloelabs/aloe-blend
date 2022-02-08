@@ -10,6 +10,6 @@
 | fTRIBE 8 silo                    | 0x2A9855dc8AFa59E6067287B8aa15cd009938d137 | f4e21e43070acb9395f6ed26c285abe3db124c97 |
 | yvWBTC silo                      | 0xdA2D30c659cFEb176053B22Be11fc351e077FDc0 | f4e21e43070acb9395f6ed26c285abe3db124c97 |
 | yvWETH silo                      | 0x8f43969d04ba8aAeC7C69813a07A276189c574D2 | f4e21e43070acb9395f6ed26c285abe3db124c97 |
-| USDC/WETH 0.05% cUSDC cETH       | 0x33cB657E7fd57F1f2d5f392FB78D5FA80806d1B4 | using factory |
-| FEI/TRIBE 0.05% fFEI 8 fTRIBE 8  | 0x0B76ABb170519C292da41404fDc30Bb5BEf308Fc | using factory |
-| WBTC/WETH 0.05% yvWBTC yvWETH    | 0xE801c4175A0341e65dFef8F3B79e1889047AfEbb | using factory |
+| USDC/WETH 0.05% cUSDC cETH       | 0x33cB657E7fd57F1f2d5f392FB78D5FA80806d1B4 | using factory                            |
+| FEI/TRIBE 0.05% fFEI 8 fTRIBE 8  | 0x0B76ABb170519C292da41404fDc30Bb5BEf308Fc | using factory                            |
+| WBTC/WETH 0.05% yvWBTC yvWETH    | 0xE801c4175A0341e65dFef8F3B79e1889047AfEbb | using factory                            |
