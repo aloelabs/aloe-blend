@@ -3,6 +3,7 @@ build_hardhat/
 cache/
 
 .vscode
+.DS_Store
 
 # Logs
 logs
