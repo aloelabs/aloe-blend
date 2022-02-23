@@ -8,8 +8,8 @@ const AloeBlend = artifacts.require("AloeBlend");
 const Factory = artifacts.require("Factory");
 const VolatilityOracle = artifacts.require("VolatilityOracle");
 
-const CompoundCEtherSilo = artifacts.require("CompoundCEtherSilo");
-const CompoundCTokenSilo = artifacts.require("CompoundCTokenSilo");
+const X2Y2Silo = artifacts.require("X2Y2Silo");
+const NOPSilo = artifacts.require("NOPSilo");
 
 chai.use(chaiAsPromised);
 const expect = chai.expect;
@@ -53,16 +53,14 @@ web3.eth.extend({
   ],
 });
 
-const dapptoolsJSON = require("../build_dapp/dapp.sol.json");
-const aloeBlendContractBuildData = dapptoolsJSON["contracts"]["contracts/AloeBlend.sol"]["AloeBlend"];
-const BYTECODE = `0x${aloeBlendContractBuildData["evm"]["bytecode"]["object"]}`;
-
+const buildJSON = require("../build_hardhat/contracts/AloeBlend.sol/AloeBlend.json");
+// console.log(buildJSON);
+const BYTECODE = buildJSON["bytecode"];
 const UINT256MAX = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
-const ADDRESS_UNI_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
-const ADDRESS_CTOKEN0 = "0x39AA39c021dfbaE8faC545936693aC917d5E7563";
-const ADDRESS_CTOKEN1 = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
-const WHALE = "0x4F868C1aa37fCf307ab38D215382e88FCA6275E2";
+const ADDRESS_UNI_POOL = "0x52cfA6bF6659175FcE27a23AbdEe798897Fe4c04";
+const ADDRESS_FEE_SHARING = "0xc8C3CC5be962b6D281E4a53DBcCe1359F76a1B85";
+const WHALE = "0x1c5507310813a07c68f243960650380669450710";
 
 function prettyPrintRebalance(tx) {
   console.log("⚖️ The vault was rebalanced!");
@@ -77,10 +75,10 @@ function prettyPrintRebalance(tx) {
       console.log(`\t   || ${lower} |======> ${middle} <======| ${upper} ||`);
     } else if (log.event === "Reward") {
       const token = log.args.token;
-      const amount = log.args.amount.toNumber();
+      const amount = log.args.amount.toString(0);
       const urgency = log.args.urgency.toNumber();
 
-      console.log(`\t   urgency=${urgency / 1e5} ---> ${amount / 1e9} of ${token.slice(0, 6)}`);
+      console.log(`\t   urgency=${urgency / 1e5} ---> ${amount} of ${token.slice(0, 6)}`);
     } else if (log.event === "Rebalance") {
       const ratio = log.args.ratio.toString(0);
       const shares = log.args.shares.toString(0);
@@ -95,11 +93,9 @@ function prettyPrintRebalance(tx) {
       const amount = log.args.amount.toString(0);
 
       if (from === ADDRESS_UNI_POOL) from = "Uniswap";
-      else if (from === ADDRESS_CTOKEN0) from = "silo0";
-      else if (from === ADDRESS_CTOKEN1) from = "silo1";
+      else if (from === ADDRESS_FEE_SHARING) from = "silo0";
       if (to === ADDRESS_UNI_POOL) to = "Uniswap";
-      else if (to === ADDRESS_CTOKEN0) to = "silo0";
-      else if (to === ADDRESS_CTOKEN1) to = "silo1";
+      else if (to === ADDRESS_FEE_SHARING) to = "silo0";
 
       console.log(`\t   (${log.address.slice(0, 7)})`);
       console.log(`\t   ${amount} from ${from.slice(0, 7)} to ${to.slice(0, 7)}`);
@@ -107,10 +103,9 @@ function prettyPrintRebalance(tx) {
   }
 }
 
-describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
+describe("X2Y2-WETH 0.3% | LooksRare Fee Sharing | no-op @hardhat", () => {
 
   let accounts;
-  let multisig;
 
   let aloeBlend;
   let factory;
@@ -125,7 +120,7 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
     await web3.eth.hardhat.reset({
       forking: {
         jsonRpcUrl: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
-        blockNumber: 12802299,
+        blockNumber: 14258694,
       },
       accounts: [
         {
@@ -148,10 +143,10 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
 
     oracle = await VolatilityOracle.new();
     factory = await Factory.new(oracle.address, BYTECODE);
-    silo0 = await CompoundCTokenSilo.new(ADDRESS_CTOKEN0, {
+    silo0 = await X2Y2Silo.new(ADDRESS_FEE_SHARING, {
       from: deployer.address,
     });
-    silo1 = await CompoundCEtherSilo.new(ADDRESS_CTOKEN1, {
+    silo1 = await NOPSilo.new({
       from: deployer.address,
     });
 
@@ -177,8 +172,8 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
     const balance0 = await token0.balanceOf(WHALE);
     const balance1 = await token1.balanceOf(WHALE);
 
-    expect(balance0.gt(2000e6)).to.be.true;
-    expect(balance1.gt(1e18)).to.be.true;
+    expect(balance0.gt(8000e18)).to.be.true;
+    expect(balance1.gt(2e18)).to.be.true;
   });
 
   it("should fail to deposit before approving tokens", async () => {
@@ -203,27 +198,27 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
   });
 
   it("should deposit", async () => {
-    const tx0 = await aloeBlend.deposit("100000000", "50000000000000000", 0, 0, {
+    const tx0 = await aloeBlend.deposit("4000000000000000000000", "50000000000000000", 0, 0, {
       from: WHALE,
     });
-    const deposit = tx0.logs[3];
+    const deposit = tx0.logs[4];
     expect(deposit.event).to.equal("Deposit");
     expect(deposit.args.sender).to.equal(WHALE);
-    expect(deposit.args.shares.toString(10)).to.equal("100000000");
-    expect(deposit.args.amount0.toString(10)).to.equal("100000000");
-    expect(deposit.args.amount1.toString(10)).to.equal("47451794160948057");
+    expect(deposit.args.shares.toString(10)).to.equal("50000000000000000");
+    expect(deposit.args.amount0.toString(10)).to.equal("168351952226762498475");
+    expect(deposit.args.amount1.toString(10)).to.equal("50000000000000000");
   });
 
   it("should deposit proportionally", async () => {
-    const tx0 = await aloeBlend.deposit("100000000", "40000000000000000", 0, 0, {
+    const tx0 = await aloeBlend.deposit("4000000000000000000000", "50000000000000000", 0, 0, {
       from: WHALE,
     });
-    const deposit = tx0.logs[3];
+    const deposit = tx0.logs[4];
     expect(deposit.event).to.equal("Deposit");
     expect(deposit.args.sender).to.equal(WHALE);
-    expect(deposit.args.shares.toString(10)).to.equal("84296075");
-    expect(deposit.args.amount0.toString(10)).to.equal("84296075");
-    expect(deposit.args.amount1.toString(10)).to.equal("40000000000000000");
+    expect(deposit.args.shares.toString(10)).to.equal("50000000000000000");
+    expect(deposit.args.amount0.toString(10)).to.equal("168351952226762498475");
+    expect(deposit.args.amount1.toString(10)).to.equal("50000000000000000");
   });
 
   it("should rebalance", async () => {
@@ -232,10 +227,10 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
 
     prettyPrintRebalance(tx0);
 
-    const balance0 = (await token0.balanceOf(aloeBlend.address)).toNumber();
-    const balance1 = (await token1.balanceOf(aloeBlend.address)).toNumber();
-    expect(balance0).to.equal(9214803); // 5% of inventory0 (contract float)
-    expect(balance1).to.equal(4372589708047402); // 5% of inventory1 (contract float)
+    const balance0 = (await token0.balanceOf(aloeBlend.address)).toString(0);
+    const balance1 = (await token1.balanceOf(aloeBlend.address)).toString(0);
+    expect(balance0).to.equal("16835195222676249847"); // 5% of inventory0 (contract float)
+    expect(balance1).to.equal("50058652228870091"); // 50% of inventory1 (contract float)
 
     const urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
     expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
@@ -248,8 +243,8 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
   it("should get inventory before rebalance", async () => {
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("184296073");
-    expect(res.inventory1.toString(10)).to.equal("87451794076657509");
+    expect(res.inventory0.toString(10)).to.equal("336705348024963086588");
+    expect(res.inventory1.toString(10)).to.equal("99999999999999999");
   });
 
   it("should rebalance again", async () => {
@@ -261,10 +256,10 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
 
     prettyPrintRebalance(tx0);
 
-    const balance0 = (await token0.balanceOf(aloeBlend.address)).toNumber();
-    const balance1 = (await token1.balanceOf(aloeBlend.address)).toNumber();
-    expect(balance0).to.equal(9214803); // 5% of inventory0 (contract float)
-    expect(balance1).to.equal(4380941078269389); // 5% of inventory1 (contract float)
+    const balance0 = (await token0.balanceOf(aloeBlend.address)).toString(0);
+    const balance1 = (await token1.balanceOf(aloeBlend.address)).toString(0);
+    expect(balance0).to.equal("16835660373494937127"); // 5% of inventory0 (contract float)
+    expect(balance1).to.equal("50058232428978603"); // 5% of inventory1 (contract float)
 
     urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
     expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
@@ -273,8 +268,8 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
   it("should get inventory after rebalance", async () => {
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("184296074");
-    expect(res.inventory1.toString(10)).to.equal("87451794079037807");
+    expect(res.inventory0.toString(10)).to.equal("336706791596537538558");
+    expect(res.inventory1.toString(10)).to.equal("100000008433376220");
   });
 
   it("should rebalance a third time", async () => {
@@ -286,10 +281,10 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
 
     prettyPrintRebalance(tx0);
 
-    const balance0 = (await token0.balanceOf(aloeBlend.address)).toNumber();
-    const balance1 = (await token1.balanceOf(aloeBlend.address)).toNumber();
-    expect(balance0).to.equal(9214803); // 5% of inventory0 (contract float)
-    expect(balance1).to.equal(4372589705422976); // 5% of inventory1 (contract float)
+    const balance0 = (await token0.balanceOf(aloeBlend.address)).toString(0);
+    const balance1 = (await token1.balanceOf(aloeBlend.address)).toString(0);
+    expect(balance0).to.equal("16835892945966358682"); // 5% of inventory0 (contract float)
+    expect(balance1).to.equal("50058022531684468"); // 5% of inventory1 (contract float)
 
     urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
     expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
@@ -298,22 +293,36 @@ describe("USDC-WETH 0.05% | cUSDC | cETH @hardhat", () => {
   it("should get inventory once more", async () => {
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("184296073");
-    expect(res.inventory1.toString(10)).to.equal("87451794088820670");
+    expect(res.inventory0.toString(10)).to.equal("336708235149808430964");
+    expect(res.inventory1.toString(10)).to.equal("100000012650011190");
   });
 
-  it("should withdraw", async () => {
-    const shares = (await aloeBlend.balanceOf(WHALE)).toNumber();
-    expect(shares).to.equal(184296075);
+  it("should withdraw some", async () => {
+    let shares = (await aloeBlend.balanceOf(WHALE)).toString();
+    expect(shares).to.equal('100000000000000000');
 
-    const tx0 = await aloeBlend.withdraw("184296075", 0, 0, { from: WHALE });
+    const tx0 = await aloeBlend.withdraw('98765432109123456', 0, 0, { from: WHALE });
     const withdraw = tx0.logs[tx0.logs.length - 1];
     expect(withdraw.event).to.equal("Withdraw");
-    expect(withdraw.args.shares.toString(10)).to.equal("184296075");
-    expect(withdraw.args.amount0.toString(10)).to.equal("184296074");
-    expect(withdraw.args.amount1.toString(10)).to.equal("87451794118248630");
+    expect(withdraw.args.shares.toString(10)).to.equal('98765432109123456');
+  });
+
+  it("should withdraw more", async () => {
+    const tx0 = await aloeBlend.withdraw("1783468723657", 0, 0, { from: WHALE });
+    const withdraw = tx0.logs[tx0.logs.length - 1];
+    expect(withdraw.event).to.equal("Withdraw");
+    expect(withdraw.args.shares.toString(10)).to.equal("1783468723657");
+    expect(withdraw.args.amount0.gt("99995497")).to.be.true;
+    expect(withdraw.args.amount1.gt("22597414240720950")).to.be.true;
+  });
+
+  it("should withdraw rest", async () => {
+    let shares = (await aloeBlend.balanceOf(WHALE)).toString();
+    await aloeBlend.withdraw(shares, 0, 0, { from: WHALE });
 
     console.log((await token0.balanceOf(aloeBlend.address)).toString(10));
     console.log((await token1.balanceOf(aloeBlend.address)).toString(10));
+    console.log((await silo0.balanceOf(aloeBlend.address)).toString(10));
+    console.log((await silo1.balanceOf(aloeBlend.address)).toString(10));
   });
 });
