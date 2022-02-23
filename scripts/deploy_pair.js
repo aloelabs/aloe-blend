@@ -40,6 +40,11 @@ const availableSilos = [
     value: '0x2A9855dc8AFa59E6067287B8aa15cd009938d137',
   },
   {
+    name: 'fRAI 9 (0xf70FC6b694D911b1F665b754f77EC5e83D340594)',
+    short: 'fRAI 9',
+    value: '0xf70FC6b694D911b1F665b754f77EC5e83D340594',
+  },
+  {
     name: 'yvWBTC (0xdA2D30c659cFEb176053B22Be11fc351e077FDc0)',
     short: 'yvWBTC',
     value: '0xdA2D30c659cFEb176053B22Be11fc351e077FDc0',
