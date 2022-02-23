@@ -43,7 +43,7 @@ const deployer = web3.eth.accounts.privateKeyToAccount(process.env.DEPLOYER);
 params = {
   from: deployer.address,
   gasLimit: (1200000).toFixed(0),
-  gasPrice: 80e9,
+  gasPrice: 40e9,
   type: "0x0",
 };
 
@@ -64,6 +64,9 @@ params = {
 
 // const FTRIBE8 = "0xFd3300A9a74b3250F1b2AbC12B47611171910b07"; // Fuse Pool 8 (comptroller: 0xc54172e34046c1653d1920d40333Dd358c7a1aF4)
 // deployFuseIncentivizedSilo(FTRIBE8, params);
+
+// const FRAI9 = "0x752F119bD4Ee2342CE35E2351648d21962c7CAfE"; // Fuse Pool 9 (comptroller: 0xd4bDCCa1CA76ceD6FC8BB1bA91C5D7c0Ca4fE567)
+// deployFuseFTokenSilo(FRAI9, params);
 
 // const yvWBTC = "0xA696a63cc78DfFa1a63E9E50587C197387FF6C7E";
 // deployYearnSilo(yvWBTC, params);
