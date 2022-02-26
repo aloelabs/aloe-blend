@@ -7,6 +7,8 @@ const CompoundCTokenSilo = artifacts.require("CompoundCTokenSilo");
 const FuseFEtherSilo = artifacts.require("FuseFEtherSilo");
 const FuseFTokenSilo = artifacts.require("FuseFTokenSilo");
 const FuseIncentivizedSilo = artifacts.require("FuseIncentivizedSilo");
+const LooksRareSilo = artifacts.require("LooksRareSilo");
+const X2Y2Silo = artifacts.require("X2Y2Silo");
 const YearnSilo = artifacts.require("YearnSilo");
 
 async function deployCEtherSilo(cEtherAddress, p) {
@@ -34,6 +36,16 @@ async function deployFuseIncentivizedSilo(fTokenAddress, p) {
   console.log(`Fuse Incentivized Silo deployed to ${silo.address}`);
 }
 
+async function deployLooksRareSilo(feeSharingAddress, p) {
+  const silo = await LooksRareSilo.new(feeSharingAddress, p);
+  console.log(`LooksRare Silo deployed to ${silo.address}`);
+}
+
+async function deployX2Y2Silo(feeSharingAddress, p) {
+  const silo = await X2Y2Silo.new(feeSharingAddress, p);
+  console.log(`X2Y2 Silo deployed to ${silo.address}`);
+}
+
 async function deployYearnSilo(yvTokenAddress, p) {
   const silo = await YearnSilo.new(yvTokenAddress, 1, p);
   console.log(`Yearn Silo deployed to ${silo.address}`);
@@ -42,8 +54,8 @@ async function deployYearnSilo(yvTokenAddress, p) {
 const deployer = web3.eth.accounts.privateKeyToAccount(process.env.DEPLOYER);
 params = {
   from: deployer.address,
-  gasLimit: (1200000).toFixed(0),
-  gasPrice: 40e9,
+  gasLimit: (1300000).toFixed(0),
+  gasPrice: 50e9,
   type: "0x0",
 };
 
@@ -73,3 +85,9 @@ params = {
 
 // const yvWETH = "0xa258C4606Ca8206D8aA700cE2143D7db854D168c";
 // deployYearnSilo(yvWETH, params);
+
+// const looksRareFeeSharing = "0xBcD7254A1D759EFA08eC7c3291B2E85c5dCC12ce";
+// deployLooksRareSilo(looksRareFeeSharing, params);
+
+// const x2y2FeeSharing = "0xc8C3CC5be962b6D281E4a53DBcCe1359F76a1B85";
+// deployX2Y2Silo(x2y2FeeSharing, params);
