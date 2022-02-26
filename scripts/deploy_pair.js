@@ -54,6 +54,11 @@ const availableSilos = [
     short: 'yvWETH',
     value: '0x8f43969d04ba8aAeC7C69813a07A276189c574D2',
   },
+  {
+    name: 'LooksRare (0x7a17dB19e5BfE3E96D6A8Da9C100ac86a4650D54)',
+    short: 'LooksRare',
+    value: '0x7a17dB19e5BfE3E96D6A8Da9C100ac86a4650D54',
+  },
 ];
 
 

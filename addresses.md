@@ -11,7 +11,9 @@
 | fRAI 9 Silo                      | 0xf70FC6b694D911b1F665b754f77EC5e83D340594 | f245d4e45ecd2d2bd129efa7197528d57304adc0 |
 | yvWBTC silo                      | 0xdA2D30c659cFEb176053B22Be11fc351e077FDc0 | f4e21e43070acb9395f6ed26c285abe3db124c97 |
 | yvWETH silo                      | 0x8f43969d04ba8aAeC7C69813a07A276189c574D2 | f4e21e43070acb9395f6ed26c285abe3db124c97 |
+| LooksRare silo                   | 0x7a17dB19e5BfE3E96D6A8Da9C100ac86a4650D54 | ef729d2ce8a4a20b6405500eadfc78e44d252c39 |
 | USDC/WETH 0.05% cUSDC cETH       | 0x33cB657E7fd57F1f2d5f392FB78D5FA80806d1B4 | using factory                            |
 | FEI/TRIBE 0.05% fFEI 8 fTRIBE 8  | 0x0B76ABb170519C292da41404fDc30Bb5BEf308Fc | using factory                            |
 | WBTC/WETH 0.05% yvWBTC yvWETH    | 0xE801c4175A0341e65dFef8F3B79e1889047AfEbb | using factory                            |
 | RAI/WETH 0.30% fRAI 9 yvWETH     | 0x37dc6FCb5C03d46b097B094785c9fA557aa32fd4 | using factory                            |
+| WETH/LOOKS 0.30% cETH Looks Stake| 0x021016FbB4d3AAeaA440508C5E06Ce8c1039FCCD | using factory                            |
