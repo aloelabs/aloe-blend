@@ -11,6 +11,7 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "dependencies": {
+    "axios": "^0.26.0",
     "inquirer": "^8.2.0"
   },
   "devDependencies": {
