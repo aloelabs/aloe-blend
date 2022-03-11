@@ -128,8 +128,8 @@ contract AloeBlendTest is DSTest {
 
         (uint256 amount0, uint256 amount1) = blend.computeMagicAmounts(inventory0, inventory1, int24(halfWidth));
 
-        assertLt(amount0, inventory0);
-        assertLt(amount1, inventory1);
+        assertLe(amount0, inventory0);
+        assertLe(amount1, inventory1);
     }
 
     function test_spec_computeMagicAmounts() public {
