@@ -6,7 +6,8 @@ This repository contains the core smart contracts for the Aloe Blend Protocol.
 
 ## Bug bounty
 
-This repository will soon be part of an Immunefi bug bounty program.
+Contracts in this repository are included in Aloe Labs' Immunefi bug bounty program. Please see
+[immunefi.com/bounty/aloeprotocol/](https://immunefi.com/bounty/aloeprotocol/) for more info.
 
 ## Disclaimer
 
