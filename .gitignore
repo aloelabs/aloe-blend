@@ -1,6 +1,7 @@
 build_dapp/
 build_hardhat/
 cache/
+scripts/results/
 
 .vscode
 .DS_Store
