@@ -5,7 +5,7 @@ const { Address, BN } = require("ethereumjs-util");
 const VolatilityOracle = artifacts.require("VolatilityOracle");
 const IUniswapV3Pool = artifacts.require("IUniswapV3Pool");
 
-ORACLE_ADDRESS = "0x0000000000f0021d219C5AE2Fd5b261966012Dd7";
+ORACLE_ADDRESS = "0x14d908ff217731f6Be49890483d43a8690116B53";
 
 async function pokeOracle(poolAddresses, gasPrice) {
   const oracle = await VolatilityOracle.at(ORACLE_ADDRESS);
@@ -19,13 +19,14 @@ async function pokeOracle(poolAddresses, gasPrice) {
     promises.push(
       oracle.estimate24H(poolAddress, {
         from: deployer.address,
-        gasLimit: 400000,
+        gasLimit: 300000,
         gasPrice: gasPrice,
         nonce: nonce,
         type: "0x0",
       })
     );
     nonce += 1;
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   await Promise.all(promises);
@@ -60,11 +61,11 @@ const X2Y2_WETH_030 = "0x52cfA6bF6659175FcE27a23AbdEe798897Fe4c04";
 const RAI_WETH_030 = "0x14DE8287AdC90f0f95Bf567C0707670de52e3813";
 
 // increaseOracleCardinality(RAI_WETH_030, 42e9);
-// pokeOracle([
-//   UNI_ETH_030,
-//   USDC_ETH_030,
-//   USDC_ETH_005,
-//   WBTC_ETH_005,
-//   FEI_TRIBE_005,
-//   DAI_USDC_001
-// ], 80e9);
+pokeOracle([
+  USDC_ETH_030,
+  USDC_ETH_005,
+  WBTC_ETH_005,
+  DAI_USDC_001,
+  WETH_LOOKS_030,
+  RAI_WETH_030,
+], 30e9);
