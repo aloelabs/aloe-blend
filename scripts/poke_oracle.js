@@ -5,7 +5,7 @@ const { Address, BN } = require("ethereumjs-util");
 const VolatilityOracle = artifacts.require("VolatilityOracle");
 const IUniswapV3Pool = artifacts.require("IUniswapV3Pool");
 
-ORACLE_ADDRESS = "0x14d908ff217731f6Be49890483d43a8690116B53";
+ORACLE_ADDRESS = "0x0000000000f0021d219C5AE2Fd5b261966012Dd7";
 
 async function pokeOracle(poolAddresses, gasPrice) {
   const oracle = await VolatilityOracle.at(ORACLE_ADDRESS);
@@ -37,7 +37,7 @@ async function increaseOracleCardinality(poolAddress, gasPrice) {
   const nonce = await web3.eth.getTransactionCount(deployer.address);
 
   const pool = await IUniswapV3Pool.at(poolAddress);
-  // 1 observation per block, 1 block every ~13 seconds on mainnet. 1 hour = 276
+  // 1 observation per block, 1 block every ~13 seconds on mainnet. 1 hour = 276 blocks
   const cardinality = 300;
 
   const receipt = await pool.increaseObservationCardinalityNext(cardinality, {

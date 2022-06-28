@@ -6,7 +6,7 @@ require("@nomiclabs/hardhat-etherscan");
 
 const mochaConfig = {
   timeout: 180000,
-  grep: "@hardhat",
+  grep: process.env.MOCHA_GREP ?? "@hardhat",
 };
 
 const compilerSettings = {
@@ -51,6 +51,10 @@ module.exports = {
       url: `https://eth-kovan.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
       timeout: 720000,
     },
+    optimism: {
+      url: `https://opt-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_OPTIMISM_KEY}`,
+      accounts: [process.env.DEPLOYER]
+    }
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,

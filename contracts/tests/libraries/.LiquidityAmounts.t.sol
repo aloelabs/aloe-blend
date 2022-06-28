@@ -30,7 +30,12 @@ contract LiquidityAmountsTest is DSTest {
         sqrtLower = TickMath.MIN_SQRT_RATIO + (sqrtLower % (TickMath.MAX_SQRT_RATIO - TickMath.MIN_SQRT_RATIO));
         sqrtUpper = TickMath.MIN_SQRT_RATIO + (sqrtUpper % (TickMath.MAX_SQRT_RATIO - TickMath.MIN_SQRT_RATIO));
 
-        (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(sqrtPrice, sqrtLower, sqrtUpper, liquidity);
+        (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPrice,
+            sqrtLower,
+            sqrtUpper,
+            liquidity
+        );
         assertLe(amount0, type(uint224).max);
         assertLe(amount1, type(uint192).max);
     }

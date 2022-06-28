@@ -31,7 +31,12 @@ interface Unitroller {
 interface RewardsDistributor {
     function compSupplySpeeds(address fToken) external view returns (uint256);
 
-    function claimRewards(address[] memory holders, address[] memory fTokens, bool borrowers, bool suppliers) external;
+    function claimRewards(
+        address[] memory holders,
+        address[] memory fTokens,
+        bool borrowers,
+        bool suppliers
+    ) external;
 }
 
 contract FuseIncentivizedSilo is ISilo {
