@@ -2,6 +2,7 @@ const hre = require("hardhat");
 const { artifacts } = require("hardhat");
 const { Address, BN } = require("ethereumjs-util");
 
+const AAVEV3Silo = artifacts.require("AAVEV3Silo");
 const CompoundCEtherSilo = artifacts.require("CompoundCEtherSilo");
 const CompoundCTokenSilo = artifacts.require("CompoundCTokenSilo");
 const FuseFEtherSilo = artifacts.require("FuseFEtherSilo");
@@ -10,6 +11,11 @@ const FuseIncentivizedSilo = artifacts.require("FuseIncentivizedSilo");
 const LooksRareSilo = artifacts.require("LooksRareSilo");
 const X2Y2Silo = artifacts.require("X2Y2Silo");
 const YearnSilo = artifacts.require("YearnSilo");
+
+async function deployAAVEV3Silo(poolAddressesProviderAddress, underlyingTokenAddress, p) {
+  const silo = await AAVEV3Silo.new(poolAddressesProviderAddress, underlyingTokenAddress, p);
+  console.log(`AAVE V3 Silo deployed to ${silo.address}`);
+}
 
 async function deployCEtherSilo(cEtherAddress, p) {
   const silo = await CompoundCEtherSilo.new(cEtherAddress, p);
@@ -54,10 +60,16 @@ async function deployYearnSilo(yvTokenAddress, p) {
 const deployer = web3.eth.accounts.privateKeyToAccount(process.env.DEPLOYER);
 params = {
   from: deployer.address,
-  gasLimit: (1300000).toFixed(0),
-  gasPrice: 50e9,
-  type: "0x0",
+  gasLimit: (2000000).toFixed(0),
+  // gasPrice: 50e9,
+  // type: "0x0",
 };
+
+// const AAVE_ADDRESS_PROVIDER = "0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb";
+// const OPTIMISM_USDC = "0x7f5c764cbc14f9669b88837ca1490cca17c31607";
+// const OPTIMISM_WETH = "0x4200000000000000000000000000000000000006";
+// deployAAVEV3Silo(AAVE_ADDRESS_PROVIDER, OPTIMISM_USDC, params);
+// deployAAVEV3Silo(AAVE_ADDRESS_PROVIDER, OPTIMISM_WETH, params);
 
 // const CETH = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
 // deployCEtherSilo(CETH, params);
