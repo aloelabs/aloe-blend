@@ -10,6 +10,16 @@ const IUniswapV3Pool = artifacts.require("IUniswapV3Pool");
 
 const availableSilos = [
   {
+    name: 'aWETH [Optimism] (0xdE4EB724AA305d8f5846cb2027c90DcBECFb3681)',
+    short: 'aWETH [Optimism]',
+    value: '0xdE4EB724AA305d8f5846cb2027c90DcBECFb3681',
+  },
+  {
+    name: 'aUSDC [Optimism] (0xe10Cb6e33486Fe7B26b9F6C7F65D67a72b1fdf96)',
+    short: 'aUSDC [Optimism]',
+    value: '0xe10Cb6e33486Fe7B26b9F6C7F65D67a72b1fdf96',
+  },
+  {
     name: 'cETH (0x0a230CCa01f7107933D5355913E9a65082F37c52)',
     short: 'cETH',
     value: '0x0a230CCa01f7107933D5355913E9a65082F37c52',

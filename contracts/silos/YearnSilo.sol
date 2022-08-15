@@ -32,7 +32,11 @@ interface IYearnVault {
     function deposit(uint256 amount) external returns (uint256 shares);
 
     /// @notice Burns up to `maxShares` shares and gives `amount` of underlying
-    function withdraw(uint256 maxShares, address recipient, uint256 maxLoss) external returns (uint256 amount);
+    function withdraw(
+        uint256 maxShares,
+        address recipient,
+        uint256 maxLoss
+    ) external returns (uint256 amount);
 }
 
 contract YearnSilo is ISilo {
@@ -54,12 +58,7 @@ contract YearnSilo is ISilo {
         decimals = vault.decimals();
 
         // ex: UNI yVault Silo
-        name = string(
-            abi.encodePacked(
-                vault.name(),
-                " Silo"
-            )
-        );
+        name = string(abi.encodePacked(vault.name(), " Silo"));
     }
 
     /// @inheritdoc ISilo
@@ -80,10 +79,10 @@ contract YearnSilo is ISilo {
     /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
-        
+
         uint256 shares = FullMath.mulDivRoundingUp(
             amount,
-            10_000 * 10 ** decimals,
+            10_000 * 10**decimals,
             vault.pricePerShare() * (10_000 - maxYearnWithdrawLoss)
         );
 
@@ -100,7 +99,7 @@ contract YearnSilo is ISilo {
         balance = FullMath.mulDiv(
             shares,
             vault.pricePerShare() * (10_000 - maxYearnWithdrawLoss),
-            10_000 * 10 ** decimals
+            10_000 * 10**decimals
         );
     }
 

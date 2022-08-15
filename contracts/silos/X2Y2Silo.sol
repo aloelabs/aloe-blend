@@ -8,12 +8,25 @@ import "contracts/interfaces/ISilo.sol";
 
 interface IX2Y2FeeSharingSystem {
     function PRECISION_FACTOR() external view returns (uint256);
+
     function x2y2Token() external view returns (address);
+
     function calculateSharesValueInX2Y2(address user) external view returns (uint256);
+
     function calculateSharePriceInX2Y2() external view returns (uint256);
+
     function deposit(uint256 amount, bool claimRewardToken) external;
+
     function withdraw(uint256 shares, bool claimRewardToken) external;
-    function userInfo(address user) external view returns (uint256 shares, uint256 userRewardPerTokenPaid, uint256 rewards);
+
+    function userInfo(address user)
+        external
+        view
+        returns (
+            uint256 shares,
+            uint256 userRewardPerTokenPaid,
+            uint256 rewards
+        );
 }
 
 contract X2Y2Silo is ISilo {

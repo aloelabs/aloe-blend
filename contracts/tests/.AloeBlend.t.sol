@@ -153,12 +153,15 @@ contract AloeBlendTest is DSTest {
         uint256 _amount1Max,
         uint160 _sqrtPriceX96
     ) public {
-
         if (_inventory0 > type(uint256).max - _inventory1) return;
         if (_totalSupplyDiff > _inventory0 + _inventory1) return;
 
         uint256 _totalSupply = _inventory0 + _inventory1 - _totalSupplyDiff;
-        if (_totalSupply == 0 || _amount0Max > type(uint256).max / _totalSupply || _amount1Max > type(uint256).max / _totalSupply) return;
+        if (
+            _totalSupply == 0 ||
+            _amount0Max > type(uint256).max / _totalSupply ||
+            _amount1Max > type(uint256).max / _totalSupply
+        ) return;
 
         (uint256 shares, uint256 amount0, uint256 amount1) = blend.computeLPShares(
             _totalSupply,

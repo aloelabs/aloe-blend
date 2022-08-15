@@ -8,12 +8,25 @@ import "contracts/interfaces/ISilo.sol";
 
 interface ILooksRareFeeSharingSystem {
     function PRECISION_FACTOR() external view returns (uint256);
+
     function looksRareToken() external view returns (address);
+
     function calculateSharesValueInLOOKS(address user) external view returns (uint256);
+
     function calculateSharePriceInLOOKS() external view returns (uint256);
+
     function deposit(uint256 amount, bool claimRewardToken) external;
+
     function withdraw(uint256 shares, bool claimRewardToken) external;
-    function userInfo(address user) external view returns (uint256 shares, uint256 userRewardPerTokenPaid, uint256 rewards);
+
+    function userInfo(address user)
+        external
+        view
+        returns (
+            uint256 shares,
+            uint256 userRewardPerTokenPaid,
+            uint256 rewards
+        );
 }
 
 contract LooksRareSilo is ISilo {

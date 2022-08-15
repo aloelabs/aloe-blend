@@ -19,13 +19,14 @@ async function pokeOracle(poolAddresses, gasPrice) {
     promises.push(
       oracle.estimate24H(poolAddress, {
         from: deployer.address,
-        gasLimit: 400000,
+        gasLimit: 300000,
         gasPrice: gasPrice,
         nonce: nonce,
         type: "0x0",
       })
     );
     nonce += 1;
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   await Promise.all(promises);
@@ -36,7 +37,7 @@ async function increaseOracleCardinality(poolAddress, gasPrice) {
   const nonce = await web3.eth.getTransactionCount(deployer.address);
 
   const pool = await IUniswapV3Pool.at(poolAddress);
-  // 1 observation per block, 1 block every ~13 seconds on mainnet. 1 hour = 276
+  // 1 observation per block, 1 block every ~13 seconds on mainnet. 1 hour = 276 blocks
   const cardinality = 300;
 
   const receipt = await pool.increaseObservationCardinalityNext(cardinality, {
@@ -60,11 +61,11 @@ const X2Y2_WETH_030 = "0x52cfA6bF6659175FcE27a23AbdEe798897Fe4c04";
 const RAI_WETH_030 = "0x14DE8287AdC90f0f95Bf567C0707670de52e3813";
 
 // increaseOracleCardinality(RAI_WETH_030, 42e9);
-// pokeOracle([
-//   UNI_ETH_030,
-//   USDC_ETH_030,
-//   USDC_ETH_005,
-//   WBTC_ETH_005,
-//   FEI_TRIBE_005,
-//   DAI_USDC_001
-// ], 80e9);
+pokeOracle([
+  USDC_ETH_030,
+  USDC_ETH_005,
+  WBTC_ETH_005,
+  DAI_USDC_001,
+  WETH_LOOKS_030,
+  RAI_WETH_030,
+], 30e9);
