@@ -52,10 +52,8 @@ web3.eth.extend({
   ],
 });
 
-const dapptoolsJSON = require("../build_dapp/dapp.sol.json");
-const aloeBlendContractBuildData = dapptoolsJSON["contracts"]["contracts/AloeBlend.sol"]["AloeBlend"];
-const BYTECODE = `0x${aloeBlendContractBuildData["evm"]["bytecode"]["object"]}`;
-
+const hardhatJSON = require("../build_hardhat/contracts/AloeBlend.sol/AloeBlend.json");
+const BYTECODE = hardhatJSON["bytecode"];
 const UINT256MAX = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
 const ADDRESS_UNI_POOL = "0x85149247691df622eaF1a8Bd0CaFd40BC45154a9";
