@@ -5,35 +5,36 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import "contracts/interfaces/ISilo.sol";
 
-interface IEIP4626 {
+interface IERC4626 {
     /// @notice Mints `shares` amount of vault tokens to `to` by depositing exactly `value` underlying tokens.
-    function deposit(address to, uint256 value) external returns (uint256 shares);
+
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
 
     /// @notice Burns `shares` vault tokens from `from`, withdrawing exactly `value` underlying tokens to `to`.
     function withdraw(
-        address from,
-        address to,
-        uint256 value
+        uint256 assets,
+        address receiver,
+        address owner
     ) external returns (uint256 shares);
 
     /// @notice Returns the address of the token the vault uses for accounting, depositing, and withdrawing.
-    function underlying() external view returns (address);
+    function asset() external view returns (address);
 
     /// Returns the value in underlying terms of the vault tokens held by `owner`. Equivalent to `previewRedeem(balanceOf(owner))`.
-    function balanceOfUnderlying(address owner) external view returns (uint256);
+    function maxWithdraw(address owner) external view returns (uint256);
 }
 
-contract EIP4626Silo is ISilo {
+contract ERC4626Silo is ISilo {
     /// @inheritdoc ISilo
     string public name;
 
-    IEIP4626 public immutable vault;
+    IERC4626 public immutable vault;
 
     address public immutable underlying;
 
-    constructor(IEIP4626 _vault) {
+    constructor(IERC4626 _vault) {
         vault = _vault;
-        underlying = _vault.underlying();
+        underlying = _vault.asset();
 
         // ex: EIP4626 (fDAI) DAI Silo
         name = string(
@@ -54,18 +55,18 @@ contract EIP4626Silo is ISilo {
     function deposit(uint256 amount) external override {
         if (amount == 0) return;
         _approve(underlying, address(vault), amount);
-        vault.deposit(address(this), amount);
+        vault.deposit(amount, address(this));
     }
 
     /// @inheritdoc ISilo
     function withdraw(uint256 amount) external override {
         if (amount == 0) return;
-        vault.withdraw(address(this), address(this), amount);
+        vault.withdraw(amount, address(this), address(this));
     }
 
     /// @inheritdoc ISilo
     function balanceOf(address account) external view override returns (uint256 balance) {
-        balance = vault.balanceOfUnderlying(account);
+        balance = vault.maxWithdraw(account);
     }
 
     /// @inheritdoc ISilo
