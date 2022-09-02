@@ -39,6 +39,11 @@ web3.eth.extend({
       params: 1,
     },
     {
+      name: "setAutomine",
+      call: "evm_setAutomine",
+      params: 1,
+    },
+    {
       name: "reset",
       call: "hardhat_reset",
       params: 1,
@@ -352,49 +357,48 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
     expect(res.inventory1.toString(10)).to.equal("115066698528320068095");
   });
 
-  // it("should exploit rebalance growth", async () => {
+  it("should exploit rebalance growth", async () => {
+    await web3.eth.hardhat.setAutomine(false);
 
-  //   // Isn't able to adjust mining mode
+    for (let i = 0; i < 300; i++) {
+      await aloeBlend.rebalance("0x0000000000000000000000000000000000000000");
+    }
 
-  //   await web3.currentProvider.send("evm_setAutomine", [false]);
+    await web3.eth.hardhat.mine();
 
-  //   for (let i = 0; i < 300; i++) {
-  //     await aloeBlend.rebalance("0x0000000000000000000000000000000000000000");
-  //   }
+    console.log(`Finished rebalance spamming`);
 
-  //   console.log(`Finished rebalance spamming`);
+    const res = await aloeBlend.getInventory();
 
-  //   const res = await aloeBlend.getInventory();
+    expect(res.inventory0.toString(10)).to.equal("9000000467395174080"); // old: 9000000004632464294
+    expect(res.inventory1.toString(10)).to.equal("115066706323759131069"); // old: 115066698528320068095
 
-  //   expect(res.inventory0.toString(10)).to.equal("9000000467395174080"); // old: 9000000004632464294
-  //   expect(res.inventory1.toString(10)).to.equal("115066706323759131069"); // old: 115066698528320068095
+    // Check whale's balance diff after withdrawing
+    const whaleStartingBalance0 = await token0.balanceOf(WHALE);
+    console.log(`Whale starting balance 0: ${whaleStartingBalance0}`);
+    const whaleStartingBalance1 = await token1.balanceOf(WHALE);
+    console.log(`Whale starting balance 1: ${whaleStartingBalance1}`);
+    const whaleShares = await aloeBlend.balanceOf(WHALE);
+    console.log(`Whale shares: ${whaleShares}`);
+    await aloeBlend.withdraw(whaleShares, 0, 0, { from: WHALE });
+    const whaleEndingBalance0 = await token0.balanceOf(WHALE);
+    console.log(`Whale ending balance 0: ${whaleEndingBalance0}`);
+    const whaleEndingBalance1 = await token1.balanceOf(WHALE);
+    console.log(`Whale ending balance 1: ${whaleEndingBalance1}`);
 
-  //   // Check whale's balance diff after withdrawing
-  //   const whaleStartingBalance0 = await token0.balanceOf(WHALE);
-  //   console.log(`Whale starting balance 0: ${whaleStartingBalance0}`);
-  //   const whaleStartingBalance1 = await token1.balanceOf(WHALE);
-  //   console.log(`Whale starting balance 1: ${whaleStartingBalance1}`);
-  //   const whaleShares = await aloeBlend.balanceOf(WHALE);
-  //   console.log(`Whale shares: ${whaleShares}`);
-  //   await aloeBlend.withdraw(whaleShares, 0, 0, { from: WHALE });
-  //   const whaleEndingBalance0 = await token0.balanceOf(WHALE);
-  //   console.log(`Whale ending balance 0: ${whaleEndingBalance0}`);
-  //   const whaleEndingBalance1 = await token1.balanceOf(WHALE);
-  //   console.log(`Whale ending balance 1: ${whaleEndingBalance1}`);
+    expect(whaleEndingBalance0.sub(whaleStartingBalance0).toString(10)).to.equal("9000000467395174080");
+    expect(whaleEndingBalance1.sub(whaleStartingBalance1).toString(10)).to.equal("115066706323759131069");
 
-  //   expect(whaleEndingBalance0.sub(whaleStartingBalance0).toString(10)).to.equal("9000000467395174080");
-  //   expect(whaleEndingBalance1.sub(whaleStartingBalance1).toString(10)).to.equal("115066706323759131069");
+    const balance0 = await token0.balanceOf(aloeBlend.address);
+    const balance1 = await token1.balanceOf(aloeBlend.address);
+    expect(balance0.toString(10)).to.equal("456345090815239715"); // 5% of inventory0 (contract float)
+    expect(balance1.toString(10)).to.equal("5753334935077597755"); // 5% of inventory1 (contract float)
 
-  //   const balance0 = await token0.balanceOf(aloeBlend.address);
-  //   const balance1 = await token1.balanceOf(aloeBlend.address);
-  //   expect(balance0.toString(10)).to.equal("456345090815239715"); // 5% of inventory0 (contract float)
-  //   expect(balance1.toString(10)).to.equal("5753334935077597755"); // 5% of inventory1 (contract float)
+    urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
+    expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
 
-  //   urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
-  //   expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
-
-  //   await web3.currentProvider.send("evm_setAutomine", [true]);
-  // });
+    await web3.eth.hardhat.setAutomine(true);
+  });
 
 
   it("should withdraw", async () => {
