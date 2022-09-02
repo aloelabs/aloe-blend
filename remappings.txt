@@ -2,4 +2,5 @@
 @rari-capital/solmate/src/=lib/solmate/src/
 @uniswap/v3-core/=lib/v3-core/
 ds-test/=lib/ds-test/src/
-@timeless-fi/yield-daddy=lib/yield-daddy
+@timeless-fi/yield-daddy=lib/yield-daddy/src/
+solmate/=lib/yield-daddy/lib/solmate/src/
