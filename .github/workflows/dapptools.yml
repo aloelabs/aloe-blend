@@ -21,7 +21,7 @@ jobs:
     - name: Fetch submodules
       run: |
         git submodule init
-        git submodule update
+        git submodule update --init --recursive
 
     - name: Install Nix
       run: curl -L https://nixos.org/nix/install | sh
