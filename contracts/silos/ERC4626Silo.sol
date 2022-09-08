@@ -36,10 +36,10 @@ contract ERC4626Silo is ISilo {
         vault = _vault;
         underlying = _vault.asset();
 
-        // ex: EIP4626 (fDAI) DAI Silo
+        // ex: ERC4626 (fDAI) DAI Silo
         name = string(
             abi.encodePacked(
-                "EIP4626 (",
+                "ERC4626 (",
                 IERC20Metadata(address(vault)).symbol(),
                 ") ",
                 IERC20Metadata(underlying).symbol(),

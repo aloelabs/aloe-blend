@@ -11,6 +11,7 @@ const FuseIncentivizedSilo = artifacts.require("FuseIncentivizedSilo");
 const LooksRareSilo = artifacts.require("LooksRareSilo");
 const X2Y2Silo = artifacts.require("X2Y2Silo");
 const YearnSilo = artifacts.require("YearnSilo");
+const ERC4626Silo = artifacts.require("ERC4626Silo");
 
 async function deployAAVEV3Silo(poolAddressesProviderAddress, underlyingTokenAddress, p) {
   const silo = await AAVEV3Silo.new(poolAddressesProviderAddress, underlyingTokenAddress, p);
@@ -57,6 +58,11 @@ async function deployYearnSilo(yvTokenAddress, p) {
   console.log(`Yearn Silo deployed to ${silo.address}`);
 }
 
+async function deployERC4626Silo(erc4626VaultAddress, p) {
+  const silo = await ERC4626Silo.new(erc4626VaultAddress, p);
+  console.log(`ERC4626 Silo deployed to ${silo.address}`);
+}
+
 const deployer = web3.eth.accounts.privateKeyToAccount(process.env.DEPLOYER);
 params = {
   from: deployer.address,
@@ -64,6 +70,11 @@ params = {
   // gasPrice: 50e9,
   // type: "0x0",
 };
+
+// const weWETH = "0x3c66B18F67CA6C1A71F829E2F6a0c987f97462d0";
+// const weoSQTH = "0x20706baA0F89e2dccF48eA549ea5A13B9b30462f";
+
+// deployERC4626Silo(weoSQTH, params);
 
 // const AAVE_ADDRESS_PROVIDER = "0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb";
 // const OPTIMISM_USDC = "0x7f5c764cbc14f9669b88837ca1490cca17c31607";
