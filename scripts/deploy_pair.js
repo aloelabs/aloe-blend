@@ -69,6 +69,16 @@ const availableSilos = [
     short: 'LooksRare',
     value: '0x7a17dB19e5BfE3E96D6A8Da9C100ac86a4650D54',
   },
+  {
+    name: 'Euler WETH (0x922E36583eeCd7ACb7006Aa3d2FA0FD1E4B0453e)',
+    short: 'eWETH',
+    value: '0x922E36583eeCd7ACb7006Aa3d2FA0FD1E4B0453e',
+  },
+  {
+    name: 'Euler oSQTH (0x7f48A8A5c5c079627EAffFD1fE4c9Cf80E741FE8)',
+    short: 'eoSQTH',
+    value: '0x7f48A8A5c5c079627EAffFD1fE4c9Cf80E741FE8',
+  },
 ];
 
 
