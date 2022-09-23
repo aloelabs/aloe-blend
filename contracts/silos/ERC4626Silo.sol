@@ -20,8 +20,8 @@ interface IERC4626 {
     /// @notice Returns the address of the token the vault uses for accounting, depositing, and withdrawing.
     function asset() external view returns (address);
 
-    /// Returns the value in underlying terms of the vault tokens held by `owner`. Equivalent to `previewRedeem(balanceOf(owner))`.
-    function maxWithdraw(address owner) external view returns (uint256);
+    /// The amount of assets that the Vault would exchange for the amount of shares provided, in an ideal scenario where all the conditions are met.
+    function convertToAssets(uint256 shares) external view returns (uint256 assets);
 }
 
 contract ERC4626Silo is ISilo {
@@ -66,7 +66,7 @@ contract ERC4626Silo is ISilo {
 
     /// @inheritdoc ISilo
     function balanceOf(address account) external view override returns (uint256 balance) {
-        balance = vault.maxWithdraw(account);
+        balance = vault.convertToAssets(IERC20(address(vault)).balanceOf(account));
     }
 
     /// @inheritdoc ISilo
