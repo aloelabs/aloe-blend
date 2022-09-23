@@ -70,14 +70,14 @@ const availableSilos = [
     value: '0x7a17dB19e5BfE3E96D6A8Da9C100ac86a4650D54',
   },
   {
-    name: 'Euler WETH (0x922E36583eeCd7ACb7006Aa3d2FA0FD1E4B0453e)',
+    name: 'Euler WETH (0x09B5C1909E62052adF7fB82060eA2a98c3a5Be45)',
     short: 'eWETH',
-    value: '0x922E36583eeCd7ACb7006Aa3d2FA0FD1E4B0453e',
+    value: '0x09B5C1909E62052adF7fB82060eA2a98c3a5Be45',
   },
   {
-    name: 'Euler oSQTH (0x7f48A8A5c5c079627EAffFD1fE4c9Cf80E741FE8)',
+    name: 'Euler oSQTH (0xEDEe9503756AaFdb50F6A7f6bfA3324CDa453D47)',
     short: 'eoSQTH',
-    value: '0x7f48A8A5c5c079627EAffFD1fE4c9Cf80E741FE8',
+    value: '0xEDEe9503756AaFdb50F6A7f6bfA3324CDa453D47',
   },
 ];
 
