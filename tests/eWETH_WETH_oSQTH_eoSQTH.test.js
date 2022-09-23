@@ -73,8 +73,6 @@ const ee4626FactoryContractBuildData = dapptoolsJSON["contracts"]["lib/yield-dad
 const ee4626FactoryBYTECODE = `0x${ee4626FactoryContractBuildData["evm"]["bytecode"]["object"]}`;
 const ee4626FactoryAbi =  ee4626FactoryContractBuildData["abi"];
 
-const ee4626Abi = dapptoolsJSON["contracts"]["lib/yield-daddy/src//euler/EulerERC4626.sol"]["EulerERC4626"]["abi"];
-
 const hardhatJSON = require("../build_hardhat/contracts/AloeBlend.sol/AloeBlend.json");
 const BYTECODE = hardhatJSON["bytecode"];
 const UINT256MAX = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
@@ -131,7 +129,7 @@ function prettyPrintRebalance(tx) {
 }
 
 
-describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
+describe("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
 
   let accounts;
   let multisig;
@@ -150,7 +148,7 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
     await web3.eth.hardhat.reset({
       forking: {
         jsonRpcUrl: `https://eth-mainnet.alchemyapi.io/v2/${process.env.PROVIDER_ALCHEMY_KEY}`,
-        blockNumber: 15448137,
+        blockNumber: 15486500,
       },
       accounts: [
         {
@@ -176,21 +174,19 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
 
     // TODO: initialize yield-daddy factory, deploy 4626 for eWETH and eoSQTH before deploying silos.
     
-    euler4626Factory = new web3.eth.Contract(ee4626FactoryAbi);
-    euler4626Factory = await euler4626Factory.deploy({
-      data: ee4626FactoryBYTECODE,
-      arguments: ["0x27182842E098f60e3D576794A5bFFb0777E025d3", "0x3520d5a913427E6F0D6A83E07ccD4A4da316e4d3"],
-    }).send({ from: deployer.address });
+    // euler4626Factory = new web3.eth.Contract(ee4626FactoryAbi);
+    // euler4626Factory = await euler4626Factory.deploy({
+    //   data: ee4626FactoryBYTECODE,
+    //   arguments: ["0x27182842E098f60e3D576794A5bFFb0777E025d3", "0x3520d5a913427E6F0D6A83E07ccD4A4da316e4d3"],
+    // }).send({ from: deployer.address });
 
     // Deploy e4626eWETH
-    await euler4626Factory.methods.createERC4626("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").send({ from: deployer.address });
-    const ee4626eWETHAddress = await euler4626Factory.methods.computeERC4626Address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").call();
-    // const ee4626eWETH = new web3.eth.Contract(ee4626Abi, ee4626eWETHAddress);
+    // await euler4626Factory.methods.createERC4626("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").send({ from: deployer.address });
+    const ee4626eWETHAddress = "0x3c66B18F67CA6C1A71F829E2F6a0c987f97462d0";//await euler4626Factory.methods.computeERC4626Address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").call();
 
     // Deploy e4626eoSQTH
-    await euler4626Factory.methods.createERC4626("0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B").send({ from: deployer.address });
-    const ee4626eoSQTHAddress = await euler4626Factory.methods.computeERC4626Address("0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B").call();
-    // const ee4626eoSQTH = new web3.eth.Contract(ee4626Abi, ee4626eoSQTHAddress);
+    // await euler4626Factory.methods.createERC4626("0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B").send({ from: deployer.address });
+    const ee4626eoSQTHAddress = "0x20706baA0F89e2dccF48eA549ea5A13B9b30462f";//await euler4626Factory.methods.computeERC4626Address("0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B").call();
 
     silo0 = await ERC4626Silo.new(ee4626eWETHAddress, {
       from: deployer.address,
@@ -255,7 +251,7 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
     expect(deposit.args.sender).to.equal(WHALE);
     expect(deposit.args.shares.toString(10)).to.equal("5000000000000000000");
     expect(deposit.args.amount0.toString(10)).to.equal("5000000000000000000");
-    expect(deposit.args.amount1.toString(10)).to.equal("63925943583536538932");
+    expect(deposit.args.amount1.toString(10)).to.equal("62988588207264974982");
   });
 
   it("should deposit proportionally", async () => {
@@ -276,7 +272,7 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
     // Difference should be <5000 (amount by which ratio was modified)
     expect(deposit.args.amount0.sub(deposit.args.shares).toNumber()).to.be.lt(5000);
     expect(deposit.args.amount0.toString(10)).to.equal("4000000000000000000");
-    expect(deposit.args.amount1.toString(10)).to.equal("51140754866829180004");
+    expect(deposit.args.amount1.toString(10)).to.equal("50390870565811929594");
   });
 
   it("should rebalance", async () => {
@@ -288,7 +284,7 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
     const balance0 = await token0.balanceOf(aloeBlend.address);
     const balance1 = await token1.balanceOf(aloeBlend.address);
     expect(balance0.toString(10)).to.equal("450000000000000250"); // 5% of inventory0 (contract float)
-    expect(balance1.toString(10)).to.equal("5753334922518285946"); // 5% of inventory1 (contract float)
+    expect(balance1.toString(10)).to.equal("5668972938653845228"); // 5% of inventory1 (contract float)
 
     const urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
     expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
@@ -307,8 +303,8 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
   it("should get inventory before rebalance in new block", async () => {
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("9000000001544963572");
-    expect(res.inventory1.toString(10)).to.equal("115066698476350501919");
+    expect(res.inventory0.toString(10)).to.equal("9000000001711477206");
+    expect(res.inventory1.toString(10)).to.equal("113379458798938772315");
     // console.log(`Post-rebalance, post block ratio: ${res.inventory1.mul(web3.utils.toBN("10000000000")).div(res.inventory0).toString(10)}`);
   });
 
@@ -323,8 +319,8 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
 
     const balance0 = await token0.balanceOf(aloeBlend.address);
     const balance1 = await token1.balanceOf(aloeBlend.address);
-    expect(balance0.toString(10)).to.equal("456345090810226012"); // 5% of inventory0 (contract float)
-    expect(balance1.toString(10)).to.equal("5753334930891160470"); // 5% of inventory1 (contract float)
+    expect(balance0.toString(10)).to.equal("450000000551474627"); // 5% of inventory0 (contract float)
+    expect(balance1.toString(10)).to.equal("5745681952542378807"); // 5% of inventory1 (contract float)
 
     urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
     expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
@@ -333,8 +329,8 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
   it("should get inventory after rebalance", async () => {
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("9000000003089922140");
-    expect(res.inventory1.toString(10)).to.equal("115066698502335284948");
+    expect(res.inventory0.toString(10)).to.equal("9000000003422949416");
+    expect(res.inventory1.toString(10)).to.equal("113379458824800640143");
   });
 
   it("should rebalance a third time", async () => {
@@ -348,8 +344,8 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
 
     const balance0 = await token0.balanceOf(aloeBlend.address);
     const balance1 = await token1.balanceOf(aloeBlend.address);
-    expect(balance0.toString(10)).to.equal("456345090815239715"); // 5% of inventory0 (contract float)
-    expect(balance1.toString(10)).to.equal("5753334935077597755"); // 5% of inventory1 (contract float)
+    expect(balance0.toString(10)).to.equal("450000000827211817"); // 5% of inventory0 (contract float)
+    expect(balance1.toString(10)).to.equal("5745681958860779049"); // 5% of inventory1 (contract float)
 
     urgency = (await aloeBlend.getRebalanceUrgency()).toNumber();
     expect(urgency).to.equal(0); // urgency should go to 0 immediately after rebalance
@@ -358,8 +354,8 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
   it("should get inventory once more", async () => {
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("9000000004632464294");
-    expect(res.inventory1.toString(10)).to.equal("115066698528320068095");
+    expect(res.inventory0.toString(10)).to.equal("9000000005134421628");
+    expect(res.inventory1.toString(10)).to.equal("113379458850642129806");
   });
 
   it("should exploit rebalance growth", async () => {
@@ -378,8 +374,8 @@ describe.only("WETH-oSQTH 0.3% | eWETH | eoSQTH @hardhat", () => {
 
     const res = await aloeBlend.getInventory();
 
-    expect(res.inventory0.toString(10)).to.equal("9000000053993813919"); // old: 9000000004632464294
-    expect(res.inventory1.toString(10)).to.equal("115066699359833176837"); // old: 115066698528320068095
+    expect(res.inventory0.toString(10)).to.equal("9000000061613005456"); // old: 9000000005134421628
+    expect(res.inventory1.toString(10)).to.equal("113379459677569847321"); // old: 113379458850642129806
 
     // Check whale's balance diff after withdrawing
     const whaleStartingBalance0 = await token0.balanceOf(WHALE);
